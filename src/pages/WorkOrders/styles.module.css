@@ -444,3 +444,70 @@
 .form select {
   cursor: pointer;
 }
+.executionBlock {
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  border-radius: 18px;
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+.executionBlock h3 {
+  font-size: 18px;
+  margin-bottom: 14px;
+}
+
+.executionBlock label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.executionBlock textarea {
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 12px 13px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  resize: vertical;
+}
+
+.taskList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.taskItem {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.taskItem strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.taskItem span {
+  display: block;
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.taskItem p {
+  margin-top: 8px;
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.mutedText {
+  color: var(--color-muted);
+  font-weight: 700;
+}

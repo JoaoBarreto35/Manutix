@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   CalendarClock,
   CheckCircle2,
-  Clock,
   Filter,
   ListChecks,
   PlayCircle,
@@ -17,16 +16,25 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import {
   addWorkOrderTask,
+  completeWorkOrderTask,
+  finishWorkOrder,
+  finishWorkOrderParticipation,
+  getWorkOrderTasks,
   getWorkOrders,
   planWorkOrder,
   releaseWorkOrder,
+  startWorkOrderParticipation,
+  validateWorkOrder,
 } from "../../services/workOrderService";
 import type {
+  FinalResult,
   MaintenanceType,
   PriorityLevel,
   TaskResponseType,
   WorkOrderListItem,
   WorkOrderStatus,
+  WorkOrderTask,
+  WorkOrderValidationResult,
 } from "../../types/workOrder";
 import styles from "./styles.module.css";
 
@@ -66,6 +74,14 @@ const responseTypeLabels: Record<TaskResponseType, string> = {
   boolean: "Sim/Não",
   compliance: "Conformidade",
   photo: "Foto",
+};
+
+const finalResultLabels: Record<FinalResult, string> = {
+  resolved: "Resolvido",
+  partially_resolved: "Parcialmente resolvido",
+  not_resolved: "Não resolvido",
+  not_applicable: "Não aplicável",
+  requires_new_work_order: "Requer nova OS",
 };
 
 function formatDateTime(value: string | null): string {
@@ -113,7 +129,17 @@ export function WorkOrders() {
   const [selectedReleaseWorkOrder, setSelectedReleaseWorkOrder] =
     useState<WorkOrderListItem | null>(null);
 
-  const [scheduledStartAt, setScheduledStartAt] = useState(getDefaultStartDateTime());
+  const [selectedExecutionWorkOrder, setSelectedExecutionWorkOrder] =
+    useState<WorkOrderListItem | null>(null);
+
+  const [selectedValidationWorkOrder, setSelectedValidationWorkOrder] =
+    useState<WorkOrderListItem | null>(null);
+
+  const [executionTasks, setExecutionTasks] = useState<WorkOrderTask[]>([]);
+
+  const [scheduledStartAt, setScheduledStartAt] = useState(
+    getDefaultStartDateTime()
+  );
   const [scheduledEndAt, setScheduledEndAt] = useState(getDefaultEndDateTime());
   const [estimatedDurationMinutes, setEstimatedDurationMinutes] = useState(120);
   const [planningNote, setPlanningNote] = useState("");
@@ -127,10 +153,33 @@ export function WorkOrders() {
 
   const [releaseReason, setReleaseReason] = useState("");
 
+  const [startReason, setStartReason] = useState("");
+  const [finishParticipationReason, setFinishParticipationReason] =
+    useState("");
+
+  const [executionDescription, setExecutionDescription] = useState("");
+  const [identifiedCause, setIdentifiedCause] = useState("");
+  const [solutionApplied, setSolutionApplied] = useState("");
+  const [finalResult, setFinalResult] = useState<FinalResult>("resolved");
+  const [materialsUsed, setMaterialsUsed] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
+  const [sendToValidation, setSendToValidation] = useState(true);
+
+  const [validationResult, setValidationResult] =
+    useState<WorkOrderValidationResult>("approved");
+  const [validationComment, setValidationComment] = useState("");
+  const [rejectionReason, setRejectionReason] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [planning, setPlanning] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
   const [releasing, setReleasing] = useState(false);
+  const [startingExecution, setStartingExecution] = useState(false);
+  const [finishingParticipation, setFinishingParticipation] = useState(false);
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+  const [finishingOrder, setFinishingOrder] = useState(false);
+  const [validating, setValidating] = useState(false);
+
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -171,17 +220,29 @@ export function WorkOrders() {
     await loadData();
   }
 
-  function openPlanningPanel(workOrder: WorkOrderListItem) {
-    setSelectedWorkOrder(workOrder);
+  function clearMessages() {
+    setErrorMessage("");
+    setSuccessMessage("");
+  }
+
+  function closeAllPanels() {
+    setSelectedWorkOrder(null);
     setSelectedTaskWorkOrder(null);
     setSelectedReleaseWorkOrder(null);
+    setSelectedExecutionWorkOrder(null);
+    setSelectedValidationWorkOrder(null);
+  }
 
+  function openPlanningPanel(workOrder: WorkOrderListItem) {
+    closeAllPanels();
+
+    setSelectedWorkOrder(workOrder);
     setScheduledStartAt(getDefaultStartDateTime());
     setScheduledEndAt(getDefaultEndDateTime());
     setEstimatedDurationMinutes(workOrder.estimated_duration_minutes ?? 120);
     setPlanningNote("");
-    setErrorMessage("");
-    setSuccessMessage("");
+
+    clearMessages();
   }
 
   function closePlanningPanel() {
@@ -193,17 +254,16 @@ export function WorkOrders() {
   }
 
   function openTaskPanel(workOrder: WorkOrderListItem) {
-    setSelectedTaskWorkOrder(workOrder);
-    setSelectedWorkOrder(null);
-    setSelectedReleaseWorkOrder(null);
+    closeAllPanels();
 
+    setSelectedTaskWorkOrder(workOrder);
     setTaskTitle("");
     setTaskDescription("");
     setTaskResponseType("checkbox");
     setTaskIsRequired(true);
     setTaskRequiresPhoto(false);
-    setErrorMessage("");
-    setSuccessMessage("");
+
+    clearMessages();
   }
 
   function closeTaskPanel() {
@@ -216,18 +276,84 @@ export function WorkOrders() {
   }
 
   function openReleasePanel(workOrder: WorkOrderListItem) {
-    setSelectedReleaseWorkOrder(workOrder);
-    setSelectedWorkOrder(null);
-    setSelectedTaskWorkOrder(null);
+    closeAllPanels();
 
+    setSelectedReleaseWorkOrder(workOrder);
     setReleaseReason("");
-    setErrorMessage("");
-    setSuccessMessage("");
+
+    clearMessages();
   }
 
   function closeReleasePanel() {
     setSelectedReleaseWorkOrder(null);
     setReleaseReason("");
+  }
+
+  async function openExecutionPanel(workOrder: WorkOrderListItem) {
+    closeAllPanels();
+
+    setSelectedExecutionWorkOrder(workOrder);
+    setStartReason("");
+    setFinishParticipationReason("");
+    setExecutionDescription("");
+    setIdentifiedCause("");
+    setSolutionApplied("");
+    setFinalResult("resolved");
+    setMaterialsUsed("");
+    setInternalNotes("");
+    setSendToValidation(true);
+
+    clearMessages();
+
+    try {
+      const tasks = await getWorkOrderTasks(workOrder.id);
+      setExecutionTasks(tasks);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao carregar subtarefas.";
+
+      setErrorMessage(message);
+      setExecutionTasks([]);
+    }
+  }
+
+  function closeExecutionPanel() {
+    setSelectedExecutionWorkOrder(null);
+    setExecutionTasks([]);
+    setStartReason("");
+    setFinishParticipationReason("");
+    setExecutionDescription("");
+    setIdentifiedCause("");
+    setSolutionApplied("");
+    setFinalResult("resolved");
+    setMaterialsUsed("");
+    setInternalNotes("");
+    setSendToValidation(true);
+  }
+
+  function openValidationPanel(workOrder: WorkOrderListItem) {
+    closeAllPanels();
+
+    setSelectedValidationWorkOrder(workOrder);
+    setValidationResult("approved");
+    setValidationComment("");
+    setRejectionReason("");
+
+    clearMessages();
+  }
+
+  function closeValidationPanel() {
+    setSelectedValidationWorkOrder(null);
+    setValidationResult("approved");
+    setValidationComment("");
+    setRejectionReason("");
+  }
+
+  async function refreshExecutionTasks() {
+    if (!selectedExecutionWorkOrder) return;
+
+    const tasks = await getWorkOrderTasks(selectedExecutionWorkOrder.id);
+    setExecutionTasks(tasks);
   }
 
   async function handlePlanWorkOrder(event: FormEvent<HTMLFormElement>) {
@@ -246,8 +372,7 @@ export function WorkOrders() {
     }
 
     setPlanning(true);
-    setErrorMessage("");
-    setSuccessMessage("");
+    clearMessages();
 
     try {
       await planWorkOrder({
@@ -280,8 +405,7 @@ export function WorkOrders() {
     if (!selectedTaskWorkOrder) return;
 
     setAddingTask(true);
-    setErrorMessage("");
-    setSuccessMessage("");
+    clearMessages();
 
     try {
       await addWorkOrderTask({
@@ -319,8 +443,7 @@ export function WorkOrders() {
     }
 
     setReleasing(true);
-    setErrorMessage("");
-    setSuccessMessage("");
+    clearMessages();
 
     try {
       await releaseWorkOrder({
@@ -342,6 +465,175 @@ export function WorkOrders() {
     }
   }
 
+  async function handleStartExecution() {
+    if (!selectedExecutionWorkOrder) return;
+
+    setStartingExecution(true);
+    clearMessages();
+
+    try {
+      await startWorkOrderParticipation({
+        workOrderId: selectedExecutionWorkOrder.id,
+        reason: startReason.trim() || null,
+      });
+
+      setSuccessMessage("Execução iniciada com sucesso.");
+
+      const updatedOrder: WorkOrderListItem = {
+        ...selectedExecutionWorkOrder,
+        status: "in_execution",
+      };
+
+      setSelectedExecutionWorkOrder(updatedOrder);
+
+      await loadData();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao iniciar execução.";
+
+      setErrorMessage(message);
+    } finally {
+      setStartingExecution(false);
+    }
+  }
+
+  async function handleCompleteTask(task: WorkOrderTask) {
+    setCompletingTaskId(task.id);
+    clearMessages();
+
+    try {
+      await completeWorkOrderTask({
+        taskId: task.id,
+        answerText: "Concluído pelo painel de execução.",
+        answerNumber: null,
+        answerBoolean: true,
+        complianceResult: true,
+      });
+
+      setSuccessMessage("Subtarefa concluída com sucesso.");
+
+      await refreshExecutionTasks();
+      await loadData();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao concluir subtarefa.";
+
+      setErrorMessage(message);
+    } finally {
+      setCompletingTaskId(null);
+    }
+  }
+
+  async function handleFinishParticipation() {
+    if (!selectedExecutionWorkOrder) return;
+
+    setFinishingParticipation(true);
+    clearMessages();
+
+    try {
+      await finishWorkOrderParticipation({
+        workOrderId: selectedExecutionWorkOrder.id,
+        reason: finishParticipationReason.trim() || null,
+      });
+
+      setSuccessMessage("Participação finalizada com sucesso.");
+      await loadData();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao finalizar participação.";
+
+      setErrorMessage(message);
+    } finally {
+      setFinishingParticipation(false);
+    }
+  }
+
+  async function handleFinishWorkOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedExecutionWorkOrder) return;
+
+    const hasPendingRequiredTasks = executionTasks.some(
+      (task) => task.is_required && task.status === "pending"
+    );
+
+    if (hasPendingRequiredTasks) {
+      setErrorMessage("Existem subtarefas obrigatórias pendentes.");
+      return;
+    }
+
+    setFinishingOrder(true);
+    clearMessages();
+
+    try {
+      await finishWorkOrder({
+        workOrderId: selectedExecutionWorkOrder.id,
+        executionDescription,
+        identifiedCause,
+        solutionApplied,
+        result: finalResult,
+        materialsUsed: materialsUsed.trim() || null,
+        internalNotes: internalNotes.trim() || null,
+        sendToValidation,
+      });
+
+      setSuccessMessage("OS finalizada com sucesso.");
+      closeExecutionPanel();
+
+      await loadData();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao finalizar OS.";
+
+      setErrorMessage(message);
+    } finally {
+      setFinishingOrder(false);
+    }
+  }
+
+  async function handleValidateWorkOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedValidationWorkOrder) return;
+
+    if (validationResult === "rejected" && !rejectionReason.trim()) {
+      setErrorMessage("Informe o motivo da reprovação.");
+      return;
+    }
+
+    setValidating(true);
+    clearMessages();
+
+    try {
+      await validateWorkOrder({
+        workOrderId: selectedValidationWorkOrder.id,
+        validationResult,
+        rejectionReason:
+          validationResult === "rejected" ? rejectionReason.trim() : null,
+        comment: validationComment.trim() || null,
+      });
+
+      setSuccessMessage(
+        validationResult === "approved"
+          ? "OS aprovada com sucesso."
+          : "OS reprovada com sucesso."
+      );
+
+      closeValidationPanel();
+
+      await loadData();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao validar OS.";
+
+      setErrorMessage(message);
+    } finally {
+      setValidating(false);
+    }
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -349,8 +641,9 @@ export function WorkOrders() {
           <span className={styles.eyebrow}>Execução operacional</span>
           <h1>Ordens de Serviço</h1>
           <p>
-            Liste, filtre, planeje, crie subtarefas e libere ordens de serviço
-            do workspace <strong>{currentWorkspace?.workspace_name}</strong>.
+            Liste, filtre, planeje, crie subtarefas, libere, execute e valide
+            ordens de serviço do workspace{" "}
+            <strong>{currentWorkspace?.workspace_name}</strong>.
           </p>
         </div>
 
@@ -589,6 +882,316 @@ export function WorkOrders() {
         </section>
       )}
 
+      {selectedExecutionWorkOrder && (
+        <section className={styles.formCard}>
+          <div className={styles.formHeader}>
+            <div>
+              <span>Execução técnica</span>
+              <h2>Executar OS {selectedExecutionWorkOrder.work_order_code}</h2>
+              <p>
+                {selectedExecutionWorkOrder.asset_code} -{" "}
+                {selectedExecutionWorkOrder.asset_name}
+              </p>
+            </div>
+          </div>
+
+          {selectedExecutionWorkOrder.status === "released" && (
+            <div className={styles.executionBlock}>
+              <h3>Iniciar execução</h3>
+
+              <label>
+                Observação de início
+                <textarea
+                  value={startReason}
+                  onChange={(event) => setStartReason(event.target.value)}
+                  rows={3}
+                  placeholder="Ex: Técnico chegou ao local e iniciou verificação."
+                />
+              </label>
+
+              <div className={styles.formActions}>
+                <button
+                  type="button"
+                  className={styles.cancelButton}
+                  onClick={closeExecutionPanel}
+                >
+                  Fechar
+                </button>
+
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  onClick={handleStartExecution}
+                  disabled={startingExecution}
+                >
+                  <PlayCircle size={16} />
+                  {startingExecution ? "Iniciando..." : "Iniciar execução"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(selectedExecutionWorkOrder.status === "in_execution" ||
+            selectedExecutionWorkOrder.status === "paused") && (
+              <>
+                <div className={styles.executionBlock}>
+                  <h3>Checklist da OS</h3>
+
+                  {executionTasks.length === 0 ? (
+                    <p className={styles.mutedText}>
+                      Nenhuma subtarefa cadastrada para esta OS.
+                    </p>
+                  ) : (
+                    <div className={styles.taskList}>
+                      {executionTasks.map((task) => (
+                        <article key={task.id} className={styles.taskItem}>
+                          <div>
+                            <strong>{task.title}</strong>
+                            <span>
+                              {responseTypeLabels[task.response_type]} ·{" "}
+                              {task.is_required ? "Obrigatória" : "Opcional"} ·{" "}
+                              {task.status === "completed"
+                                ? "Concluída"
+                                : task.status === "not_applicable"
+                                  ? "Não aplicável"
+                                  : "Pendente"}
+                            </span>
+                            {task.description && <p>{task.description}</p>}
+                          </div>
+
+                          {task.status === "pending" && (
+                            <button
+                              type="button"
+                              className={styles.actionButton}
+                              onClick={() => handleCompleteTask(task)}
+                              disabled={completingTaskId === task.id}
+                            >
+                              <CheckCircle2 size={16} />
+                              {completingTaskId === task.id
+                                ? "Concluindo..."
+                                : "Concluir"}
+                            </button>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className={styles.executionBlock}>
+                  <h3>Finalizar participação</h3>
+
+                  <label>
+                    Observação da participação
+                    <textarea
+                      value={finishParticipationReason}
+                      onChange={(event) =>
+                        setFinishParticipationReason(event.target.value)
+                      }
+                      rows={3}
+                      placeholder="Ex: Técnico finalizou sua atividade na OS."
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={handleFinishParticipation}
+                    disabled={finishingParticipation}
+                  >
+                    {finishingParticipation
+                      ? "Finalizando..."
+                      : "Finalizar minha participação"}
+                  </button>
+                </div>
+
+                <form onSubmit={handleFinishWorkOrder} className={styles.form}>
+                  <label className={styles.fullField}>
+                    Descrição do serviço executado
+                    <textarea
+                      value={executionDescription}
+                      onChange={(event) =>
+                        setExecutionDescription(event.target.value)
+                      }
+                      rows={4}
+                      placeholder="Descreva exatamente o que foi feito."
+                      required
+                    />
+                  </label>
+
+                  <label className={styles.fullField}>
+                    Causa identificada
+                    <textarea
+                      value={identifiedCause}
+                      onChange={(event) => setIdentifiedCause(event.target.value)}
+                      rows={3}
+                      placeholder="Ex: Vedação danificada na conexão."
+                      required
+                    />
+                  </label>
+
+                  <label className={styles.fullField}>
+                    Solução aplicada
+                    <textarea
+                      value={solutionApplied}
+                      onChange={(event) => setSolutionApplied(event.target.value)}
+                      rows={3}
+                      placeholder="Ex: Substituição da vedação e teste de estanqueidade."
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Resultado final
+                    <select
+                      value={finalResult}
+                      onChange={(event) =>
+                        setFinalResult(event.target.value as FinalResult)
+                      }
+                    >
+                      {Object.entries(finalResultLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Enviar para validação?
+                    <select
+                      value={sendToValidation ? "yes" : "no"}
+                      onChange={(event) =>
+                        setSendToValidation(event.target.value === "yes")
+                      }
+                    >
+                      <option value="yes">Sim</option>
+                      <option value="no">Não</option>
+                    </select>
+                  </label>
+
+                  <label className={styles.fullField}>
+                    Materiais utilizados
+                    <textarea
+                      value={materialsUsed}
+                      onChange={(event) => setMaterialsUsed(event.target.value)}
+                      rows={3}
+                      placeholder="Ex: Veda rosca, conexão, parafusos..."
+                    />
+                  </label>
+
+                  <label className={styles.fullField}>
+                    Observações internas
+                    <textarea
+                      value={internalNotes}
+                      onChange={(event) => setInternalNotes(event.target.value)}
+                      rows={3}
+                      placeholder="Observações internas para a equipe."
+                    />
+                  </label>
+
+                  <div className={styles.formActions}>
+                    <button
+                      type="button"
+                      className={styles.cancelButton}
+                      onClick={closeExecutionPanel}
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="submit"
+                      className={styles.primaryButton}
+                      disabled={finishingOrder}
+                    >
+                      <CheckCircle2 size={16} />
+                      {finishingOrder ? "Finalizando..." : "Finalizar OS"}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+        </section>
+      )}
+
+      {selectedValidationWorkOrder && (
+        <section className={styles.formCard}>
+          <div className={styles.formHeader}>
+            <div>
+              <span>Validação</span>
+              <h2>Validar OS {selectedValidationWorkOrder.work_order_code}</h2>
+              <p>
+                {selectedValidationWorkOrder.asset_code} -{" "}
+                {selectedValidationWorkOrder.asset_name}
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleValidateWorkOrder} className={styles.form}>
+            <label>
+              Resultado da validação
+              <select
+                value={validationResult}
+                onChange={(event) =>
+                  setValidationResult(
+                    event.target.value as WorkOrderValidationResult
+                  )
+                }
+              >
+                <option value="approved">Aprovar</option>
+                <option value="rejected">Reprovar</option>
+              </select>
+            </label>
+
+            {validationResult === "rejected" && (
+              <label className={styles.fullField}>
+                Motivo da reprovação
+                <textarea
+                  value={rejectionReason}
+                  onChange={(event) => setRejectionReason(event.target.value)}
+                  rows={3}
+                  placeholder="Explique o motivo da reprovação."
+                  required
+                />
+              </label>
+            )}
+
+            <label className={styles.fullField}>
+              Comentário
+              <textarea
+                value={validationComment}
+                onChange={(event) => setValidationComment(event.target.value)}
+                rows={3}
+                placeholder="Comentário opcional sobre a validação."
+              />
+            </label>
+
+            <div className={styles.formActions}>
+              <button
+                type="button"
+                className={styles.cancelButton}
+                onClick={closeValidationPanel}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="submit"
+                className={styles.primaryButton}
+                disabled={validating}
+              >
+                <CheckCircle2 size={16} />
+                {validating
+                  ? "Validando..."
+                  : validationResult === "approved"
+                    ? "Aprovar OS"
+                    : "Reprovar OS"}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
       <section className={styles.filters}>
         <form onSubmit={handleSearchSubmit} className={styles.searchBox}>
           <Search size={18} />
@@ -710,10 +1313,47 @@ export function WorkOrders() {
                   )}
 
                   {order.status === "released" && (
-                    <span className={styles.infoPill}>
-                      <PlayCircle size={15} />
-                      Liberada para execução
-                    </span>
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      onClick={() => openExecutionPanel(order)}
+                    >
+                      <PlayCircle size={16} />
+                      Iniciar execução
+                    </button>
+                  )}
+
+                  {order.status === "in_execution" && (
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      onClick={() => openExecutionPanel(order)}
+                    >
+                      <PlayCircle size={16} />
+                      Continuar execução
+                    </button>
+                  )}
+
+                  {order.status === "paused" && (
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      onClick={() => openExecutionPanel(order)}
+                    >
+                      <PlayCircle size={16} />
+                      Retomar execução
+                    </button>
+                  )}
+
+                  {order.status === "waiting_validation" && (
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      onClick={() => openValidationPanel(order)}
+                    >
+                      <CheckCircle2 size={16} />
+                      Validar OS
+                    </button>
                   )}
 
                   {order.primary_user_id && (

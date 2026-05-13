@@ -138,3 +138,74 @@ export type ReleaseWorkOrderInput = {
   workOrderId: string;
   reason: string | null;
 };
+export type WorkOrderTaskStatus =
+  | "pending"
+  | "completed"
+  | "not_applicable";
+
+export type FinalResult =
+  | "resolved"
+  | "partially_resolved"
+  | "not_resolved"
+  | "not_applicable"
+  | "requires_new_work_order";
+
+export type WorkOrderTask = {
+  id: string;
+  workspace_id: string;
+  work_order_id: string;
+  title: string;
+  description: string | null;
+  response_type: TaskResponseType;
+  is_required: boolean;
+  requires_photo: boolean;
+  status: WorkOrderTaskStatus;
+  answer_text: string | null;
+  answer_number: number | null;
+  answer_boolean: boolean | null;
+  compliance_result: boolean | null;
+  not_applicable_reason: string | null;
+  completed_by: string | null;
+  completed_at: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StartWorkOrderParticipationInput = {
+  workOrderId: string;
+  reason: string | null;
+};
+
+export type FinishWorkOrderParticipationInput = {
+  workOrderId: string;
+  reason: string | null;
+};
+
+export type CompleteWorkOrderTaskInput = {
+  taskId: string;
+  answerText: string | null;
+  answerNumber: number | null;
+  answerBoolean: boolean | null;
+  complianceResult: boolean | null;
+};
+
+export type FinishWorkOrderInput = {
+  workOrderId: string;
+  executionDescription: string;
+  identifiedCause: string;
+  solutionApplied: string;
+  result: FinalResult;
+  materialsUsed: string | null;
+  internalNotes: string | null;
+  sendToValidation: boolean;
+};
+
+export type WorkOrderValidationResult = "approved" | "rejected";
+
+export type ValidateWorkOrderInput = {
+  workOrderId: string;
+  validationResult: WorkOrderValidationResult;
+  rejectionReason: string | null;
+  comment: string | null;
+};
