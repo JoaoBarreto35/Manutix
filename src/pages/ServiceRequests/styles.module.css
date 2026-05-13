@@ -398,3 +398,39 @@
     align-items: stretch;
   }
 }
+.successBox {
+  background: #dcfce7;
+  color: #16a34a;
+  border-radius: 18px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+}
+
+.formHeader p {
+  color: var(--color-muted);
+  margin-top: -10px;
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+
+.cardActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.actionButton {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 900;
+  cursor: pointer;
+}

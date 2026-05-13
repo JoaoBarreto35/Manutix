@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { AssetTypeProblem } from "../types/serviceRequest";
+import type { AssetTypeProblem, ConvertServiceRequestInput } from "../types/serviceRequest";
 import type {
   CreateServiceRequestInput,
   ServiceRequestListItem,
@@ -80,6 +80,30 @@ export async function createServiceRequest(
 
   if (!data) {
     throw new Error("Não foi possível criar o chamado.");
+  }
+
+  return data as string;
+}
+export async function convertServiceRequestToWorkOrder(
+  input: ConvertServiceRequestInput
+): Promise<string> {
+  const { data, error } = await supabase.rpc(
+    "convert_service_request_to_work_order",
+    {
+      target_service_request_id: input.serviceRequestId,
+      target_priority: input.priority,
+      target_maintenance_type: input.maintenanceType,
+      target_title: input.title,
+      target_description: input.description,
+    }
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Não foi possível converter o chamado em OS.");
   }
 
   return data as string;

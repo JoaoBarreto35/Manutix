@@ -12,6 +12,7 @@ import {
 import { useWorkspace } from "../../contexts/WorkspaceContext";
 import { getAssets } from "../../services/assetService";
 import {
+  convertServiceRequestToWorkOrder,
   createServiceRequest,
   getProblemsByAssetType,
   getServiceRequests,
@@ -19,6 +20,7 @@ import {
 import type { AssetListItem } from "../../types/asset";
 import type {
   AssetTypeProblem,
+  MaintenanceType,
   PriorityLevel,
   ServiceRequestListItem,
   ServiceRequestStatus,
@@ -43,6 +45,14 @@ const priorityLabels: Record<PriorityLevel, string> = {
   medium: "Média",
   high: "Alta",
   critical: "Crítica",
+};
+
+const maintenanceTypeLabels: Record<MaintenanceType, string> = {
+  corrective: "Corretiva",
+  preventive: "Preventiva",
+  inspection: "Inspeção",
+  improvement: "Melhoria",
+  emergency: "Emergência",
 };
 
 function formatDate(value: string): string {
@@ -70,10 +80,20 @@ export function ServiceRequests() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
 
+  const [selectedRequestToConvert, setSelectedRequestToConvert] =
+    useState<ServiceRequestListItem | null>(null);
+  const [convertPriority, setConvertPriority] = useState<PriorityLevel>("medium");
+  const [convertMaintenanceType, setConvertMaintenanceType] =
+    useState<MaintenanceType>("corrective");
+  const [convertTitle, setConvertTitle] = useState("");
+  const [convertDescription, setConvertDescription] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [loadingProblems, setLoadingProblems] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   const selectedAsset = useMemo(() => {
     return assets.find((asset) => asset.id === assetId) ?? null;
@@ -187,6 +207,7 @@ export function ServiceRequests() {
 
     setCreating(true);
     setErrorMessage("");
+    setSuccessMessage("");
 
     try {
       await createServiceRequest({
@@ -203,6 +224,7 @@ export function ServiceRequests() {
       setDescription("");
       setProblemOtherText("");
       setShowForm(false);
+      setSuccessMessage("Chamado aberto com sucesso.");
 
       await loadData();
     } catch (error) {
@@ -215,6 +237,58 @@ export function ServiceRequests() {
     }
   }
 
+  function openConvertPanel(request: ServiceRequestListItem) {
+    setSelectedRequestToConvert(request);
+    setConvertPriority(request.suggested_priority);
+    setConvertMaintenanceType(request.suggested_maintenance_type);
+    setConvertTitle(request.title);
+    setConvertDescription(request.description);
+    setErrorMessage("");
+    setSuccessMessage("");
+  }
+
+  function closeConvertPanel() {
+    setSelectedRequestToConvert(null);
+    setConvertPriority("medium");
+    setConvertMaintenanceType("corrective");
+    setConvertTitle("");
+    setConvertDescription("");
+  }
+
+  async function handleConvertToWorkOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedRequestToConvert) return;
+
+    setConverting(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      await convertServiceRequestToWorkOrder({
+        serviceRequestId: selectedRequestToConvert.id,
+        priority: convertPriority,
+        maintenanceType: convertMaintenanceType,
+        title: convertTitle,
+        description: convertDescription,
+      });
+
+      setSuccessMessage("Chamado convertido em OS com sucesso.");
+      closeConvertPanel();
+
+      await loadData();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao converter chamado em OS.";
+
+      setErrorMessage(message);
+    } finally {
+      setConverting(false);
+    }
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -222,9 +296,8 @@ export function ServiceRequests() {
           <span className={styles.eyebrow}>Solicitações</span>
           <h1>Chamados</h1>
           <p>
-            Abra, acompanhe e filtre solicitações vinculadas aos ativos e
-            localizações do workspace{" "}
-            <strong>{currentWorkspace?.workspace_name}</strong>.
+            Abra, acompanhe, filtre e converta solicitações em ordens de serviço
+            no workspace <strong>{currentWorkspace?.workspace_name}</strong>.
           </p>
         </div>
 
@@ -249,6 +322,13 @@ export function ServiceRequests() {
         <div className={styles.errorBox}>
           <AlertTriangle size={18} />
           <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className={styles.successBox}>
+          <CheckCircle2 size={18} />
+          <span>{successMessage}</span>
         </div>
       )}
 
@@ -317,7 +397,7 @@ export function ServiceRequests() {
               <input
                 value={
                   selectedProblem
-                    ? selectedProblem.suggested_maintenance_type
+                    ? maintenanceTypeLabels[selectedProblem.suggested_maintenance_type]
                     : "A definir na triagem"
                 }
                 disabled
@@ -368,6 +448,92 @@ export function ServiceRequests() {
 
               <button type="submit" className={styles.primaryButton} disabled={creating}>
                 {creating ? "Abrindo..." : "Abrir chamado"}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {selectedRequestToConvert && (
+        <section className={styles.formCard}>
+          <div className={styles.formHeader}>
+            <div>
+              <span>Triagem</span>
+              <h2>Converter chamado em OS</h2>
+              <p>
+                Chamado {selectedRequestToConvert.request_code} ·{" "}
+                {selectedRequestToConvert.asset_code} -{" "}
+                {selectedRequestToConvert.asset_name}
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleConvertToWorkOrder} className={styles.form}>
+            <label>
+              Prioridade
+              <select
+                value={convertPriority}
+                onChange={(event) =>
+                  setConvertPriority(event.target.value as PriorityLevel)
+                }
+              >
+                <option value="low">Baixa</option>
+                <option value="medium">Média</option>
+                <option value="high">Alta</option>
+                <option value="critical">Crítica</option>
+              </select>
+            </label>
+
+            <label>
+              Tipo de manutenção
+              <select
+                value={convertMaintenanceType}
+                onChange={(event) =>
+                  setConvertMaintenanceType(event.target.value as MaintenanceType)
+                }
+              >
+                <option value="corrective">Corretiva</option>
+                <option value="inspection">Inspeção</option>
+                <option value="improvement">Melhoria</option>
+                <option value="emergency">Emergência</option>
+              </select>
+            </label>
+
+            <label className={styles.fullField}>
+              Título da OS
+              <input
+                value={convertTitle}
+                onChange={(event) => setConvertTitle(event.target.value)}
+                required
+              />
+            </label>
+
+            <label className={styles.fullField}>
+              Descrição da OS
+              <textarea
+                value={convertDescription}
+                onChange={(event) => setConvertDescription(event.target.value)}
+                rows={4}
+                required
+              />
+            </label>
+
+            <div className={styles.formActions}>
+              <button
+                type="button"
+                className={styles.cancelButton}
+                onClick={closeConvertPanel}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="submit"
+                className={styles.primaryButton}
+                disabled={converting}
+              >
+                <Wrench size={16} />
+                {converting ? "Convertendo..." : "Converter em OS"}
               </button>
             </div>
           </form>
@@ -459,6 +625,19 @@ export function ServiceRequests() {
                   <span>Comentários: {request.comments_count}</span>
                   <span>Anexos: {request.attachments_count}</span>
                 </div>
+
+                {request.status === "new" && (
+                  <div className={styles.cardActions}>
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      onClick={() => openConvertPanel(request)}
+                    >
+                      <Wrench size={16} />
+                      Converter em OS
+                    </button>
+                  </div>
+                )}
               </div>
             </article>
           ))

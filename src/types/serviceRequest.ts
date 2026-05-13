@@ -98,3 +98,11 @@ export type CreateServiceRequestInput = {
   description: string;
   source: ServiceRequestSource;
 };
+
+export type ConvertServiceRequestInput = {
+  serviceRequestId: string;
+  priority: PriorityLevel | null;
+  maintenanceType: MaintenanceType | null;
+  title: string | null;
+  description: string | null;
+};
