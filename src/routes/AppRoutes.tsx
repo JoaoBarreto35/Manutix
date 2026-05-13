@@ -4,6 +4,7 @@ import { useWorkspace } from "../contexts/WorkspaceContext";
 import { Assets } from "../pages/Assets";
 import { Dashboard } from "../pages/Dashboard";
 import { Login } from "../pages/Login";
+import { ServiceRequests } from "../pages/ServiceRequests";
 import { SetupWorkspace } from "../pages/SetupWorkspace";
 import { ProtectedRoute } from "./ProtectedRoute";
 
@@ -40,7 +41,7 @@ export function AppRoutes() {
         <Route element={<WorkspaceGate />}>
           <Route index element={<Dashboard />} />
           <Route path="/ativos" element={<Assets />} />
-          <Route path="/chamados" element={<PlaceholderPage title="Chamados" />} />
+          <Route path="/chamados" element={<ServiceRequests />} />
           <Route path="/ordens" element={<PlaceholderPage title="Ordens de Serviço" />} />
           <Route
             path="/configuracoes"
