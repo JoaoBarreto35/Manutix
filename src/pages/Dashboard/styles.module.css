@@ -5,17 +5,23 @@
 }
 
 .header {
-  background: linear-gradient(135deg, var(--color-primary), #0f172a);
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.22), transparent 32%),
+    linear-gradient(135deg, var(--color-primary), #0f172a);
   color: white;
   padding: 32px;
   border-radius: 28px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
 }
 
 .eyebrow {
   display: inline-flex;
   margin-bottom: 12px;
   font-weight: 900;
-  opacity: 0.8;
+  opacity: 0.86;
 }
 
 .header h1 {
@@ -24,14 +30,33 @@
 }
 
 .header p {
-  max-width: 680px;
+  max-width: 720px;
   line-height: 1.6;
   opacity: 0.9;
 }
 
+.header button {
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.14);
+  color: white;
+  border-radius: 14px;
+  padding: 11px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.header button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -39,34 +64,168 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 22px;
-  padding: 22px;
+  padding: 20px;
   box-shadow: var(--shadow-card);
+  display: flex;
+  gap: 14px;
+  min-height: 170px;
+}
+
+.cardIcon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: var(--color-background);
+  color: var(--color-muted);
 }
 
 .card span {
   color: var(--color-muted);
   font-weight: 800;
+  font-size: 14px;
 }
 
 .card strong {
   display: block;
-  font-size: 34px;
-  margin: 14px 0 6px;
+  font-size: 32px;
+  margin: 12px 0 6px;
+  color: var(--color-text);
 }
 
 .card p {
   color: var(--color-muted);
-  line-height: 1.5;
+  line-height: 1.45;
+  font-size: 14px;
 }
 
-@media (max-width: 1100px) {
+.primary .cardIcon {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.success .cardIcon {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.warning .cardIcon {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.danger .cardIcon {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+}
+
+.default .cardIcon {
+  background: var(--color-background);
+  color: var(--color-muted);
+}
+
+.errorBox {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+  border-radius: 18px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.loadingBox {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 22px;
+  padding: 32px;
+  color: var(--color-muted);
+  font-weight: 800;
+  box-shadow: var(--shadow-card);
+}
+
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.panelLabel {
+  display: inline-flex;
+  margin-bottom: 10px;
+  color: var(--color-primary);
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.panel h2 {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.panel p {
+  color: var(--color-muted);
+  line-height: 1.6;
+  max-width: 720px;
+}
+
+.panelInfo {
+  min-width: 260px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.panelInfo span {
+  display: block;
+  color: var(--color-muted);
+  font-weight: 800;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.panelInfo strong {
+  display: block;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+@media (max-width: 1280px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .header,
+  .panel {
+    flex-direction: column;
+  }
+
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .panelInfo {
+    width: 100%;
   }
 }
 
 @media (max-width: 640px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .header h1 {
+    font-size: 28px;
   }
 }
