@@ -1,0 +1,365 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.header {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 28px;
+  padding: 28px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  margin-bottom: 10px;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.header h1 {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.header p {
+  color: var(--color-muted);
+  line-height: 1.6;
+}
+
+.headerActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.primaryButton,
+.secondaryButton,
+.cancelButton {
+  border: none;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.primaryButton {
+  background: var(--color-primary);
+  color: white;
+}
+
+.secondaryButton {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.cancelButton {
+  background: var(--color-background);
+  color: var(--color-muted);
+  border: 1px solid var(--color-border);
+}
+
+.primaryButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.errorBox {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+  border-radius: 18px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+}
+
+.formCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+}
+
+.formHeader span {
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.formHeader h2 {
+  margin-top: 6px;
+  margin-bottom: 20px;
+  font-size: 24px;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.form input,
+.form select,
+.form textarea {
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 12px 13px;
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+.form textarea {
+  resize: vertical;
+}
+
+.fullField {
+  grid-column: 1 / -1;
+}
+
+.formActions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.filters {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 22px;
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.searchBox {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 8px 10px;
+}
+
+.searchBox input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  outline: none;
+}
+
+.searchBox button {
+  border: none;
+  border-radius: 12px;
+  padding: 9px 12px;
+  background: var(--color-primary);
+  color: white;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filterGroup select {
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.assetCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 22px;
+  padding: 18px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  gap: 16px;
+}
+
+.assetIcon {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.assetMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.assetTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.assetTop strong {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+
+.assetTop span {
+  color: var(--color-muted);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.kindBadge,
+.criticalityBadge {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.kindBadge {
+  background: var(--color-background);
+  color: var(--color-muted);
+}
+
+.criticalityBadge {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.low {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.medium {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.high {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.critical {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+}
+
+.assetMain p {
+  margin-top: 10px;
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.meta span {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.emptyState {
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: 22px;
+  padding: 32px;
+  text-align: center;
+  color: var(--color-muted);
+  font-weight: 800;
+}
+
+@media (max-width: 1024px) {
+  .header,
+  .filters {
+    flex-direction: column;
+  }
+
+  .form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filterGroup {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 720px) {
+  .form {
+    grid-template-columns: 1fr;
+  }
+
+  .assetTop {
+    flex-direction: column;
+  }
+
+  .badges {
+    justify-content: flex-start;
+  }
+
+  .searchBox {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

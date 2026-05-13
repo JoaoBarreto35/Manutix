@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
 import { useWorkspace } from "../contexts/WorkspaceContext";
+import { Assets } from "../pages/Assets";
 import { Dashboard } from "../pages/Dashboard";
 import { Login } from "../pages/Login";
 import { SetupWorkspace } from "../pages/SetupWorkspace";
@@ -38,7 +39,7 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<WorkspaceGate />}>
           <Route index element={<Dashboard />} />
-          <Route path="/ativos" element={<PlaceholderPage title="Ativos" />} />
+          <Route path="/ativos" element={<Assets />} />
           <Route path="/chamados" element={<PlaceholderPage title="Chamados" />} />
           <Route path="/ordens" element={<PlaceholderPage title="Ordens de Serviço" />} />
           <Route
