@@ -6,6 +6,7 @@ import { Dashboard } from "../pages/Dashboard";
 import { Login } from "../pages/Login";
 import { ServiceRequests } from "../pages/ServiceRequests";
 import { SetupWorkspace } from "../pages/SetupWorkspace";
+import { WorkOrders } from "../pages/WorkOrders";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 function WorkspaceGate() {
@@ -42,7 +43,7 @@ export function AppRoutes() {
           <Route index element={<Dashboard />} />
           <Route path="/ativos" element={<Assets />} />
           <Route path="/chamados" element={<ServiceRequests />} />
-          <Route path="/ordens" element={<PlaceholderPage title="Ordens de Serviço" />} />
+          <Route path="/ordens" element={<WorkOrders />} />
           <Route
             path="/configuracoes"
             element={<PlaceholderPage title="Configurações" />}
