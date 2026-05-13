@@ -115,3 +115,26 @@ export type PlanWorkOrderInput = {
   estimatedDurationMinutes: number;
   note: string | null;
 };
+
+export type TaskResponseType =
+  | "checkbox"
+  | "text"
+  | "number"
+  | "boolean"
+  | "compliance"
+  | "photo";
+
+export type AddWorkOrderTaskInput = {
+  workOrderId: string;
+  title: string;
+  description: string | null;
+  responseType: TaskResponseType;
+  isRequired: boolean;
+  requiresPhoto: boolean;
+  sortOrder: number;
+};
+
+export type ReleaseWorkOrderInput = {
+  workOrderId: string;
+  reason: string | null;
+};

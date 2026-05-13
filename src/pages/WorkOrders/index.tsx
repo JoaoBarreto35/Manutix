@@ -5,18 +5,26 @@ import {
   CheckCircle2,
   Clock,
   Filter,
+  ListChecks,
   PlayCircle,
   RefreshCw,
   Search,
+  Send,
   UserRound,
   Wrench,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
-import { getWorkOrders, planWorkOrder } from "../../services/workOrderService";
+import {
+  addWorkOrderTask,
+  getWorkOrders,
+  planWorkOrder,
+  releaseWorkOrder,
+} from "../../services/workOrderService";
 import type {
   MaintenanceType,
   PriorityLevel,
+  TaskResponseType,
   WorkOrderListItem,
   WorkOrderStatus,
 } from "../../types/workOrder";
@@ -49,6 +57,15 @@ const maintenanceTypeLabels: Record<MaintenanceType, string> = {
   inspection: "Inspeção",
   improvement: "Melhoria",
   emergency: "Emergência",
+};
+
+const responseTypeLabels: Record<TaskResponseType, string> = {
+  checkbox: "Checkbox",
+  text: "Texto",
+  number: "Número",
+  boolean: "Sim/Não",
+  compliance: "Conformidade",
+  photo: "Foto",
 };
 
 function formatDateTime(value: string | null): string {
@@ -90,13 +107,30 @@ export function WorkOrders() {
   const [selectedWorkOrder, setSelectedWorkOrder] =
     useState<WorkOrderListItem | null>(null);
 
+  const [selectedTaskWorkOrder, setSelectedTaskWorkOrder] =
+    useState<WorkOrderListItem | null>(null);
+
+  const [selectedReleaseWorkOrder, setSelectedReleaseWorkOrder] =
+    useState<WorkOrderListItem | null>(null);
+
   const [scheduledStartAt, setScheduledStartAt] = useState(getDefaultStartDateTime());
   const [scheduledEndAt, setScheduledEndAt] = useState(getDefaultEndDateTime());
   const [estimatedDurationMinutes, setEstimatedDurationMinutes] = useState(120);
   const [planningNote, setPlanningNote] = useState("");
 
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskResponseType, setTaskResponseType] =
+    useState<TaskResponseType>("checkbox");
+  const [taskIsRequired, setTaskIsRequired] = useState(true);
+  const [taskRequiresPhoto, setTaskRequiresPhoto] = useState(false);
+
+  const [releaseReason, setReleaseReason] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [planning, setPlanning] = useState(false);
+  const [addingTask, setAddingTask] = useState(false);
+  const [releasing, setReleasing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -139,6 +173,9 @@ export function WorkOrders() {
 
   function openPlanningPanel(workOrder: WorkOrderListItem) {
     setSelectedWorkOrder(workOrder);
+    setSelectedTaskWorkOrder(null);
+    setSelectedReleaseWorkOrder(null);
+
     setScheduledStartAt(getDefaultStartDateTime());
     setScheduledEndAt(getDefaultEndDateTime());
     setEstimatedDurationMinutes(workOrder.estimated_duration_minutes ?? 120);
@@ -153,6 +190,44 @@ export function WorkOrders() {
     setScheduledEndAt(getDefaultEndDateTime());
     setEstimatedDurationMinutes(120);
     setPlanningNote("");
+  }
+
+  function openTaskPanel(workOrder: WorkOrderListItem) {
+    setSelectedTaskWorkOrder(workOrder);
+    setSelectedWorkOrder(null);
+    setSelectedReleaseWorkOrder(null);
+
+    setTaskTitle("");
+    setTaskDescription("");
+    setTaskResponseType("checkbox");
+    setTaskIsRequired(true);
+    setTaskRequiresPhoto(false);
+    setErrorMessage("");
+    setSuccessMessage("");
+  }
+
+  function closeTaskPanel() {
+    setSelectedTaskWorkOrder(null);
+    setTaskTitle("");
+    setTaskDescription("");
+    setTaskResponseType("checkbox");
+    setTaskIsRequired(true);
+    setTaskRequiresPhoto(false);
+  }
+
+  function openReleasePanel(workOrder: WorkOrderListItem) {
+    setSelectedReleaseWorkOrder(workOrder);
+    setSelectedWorkOrder(null);
+    setSelectedTaskWorkOrder(null);
+
+    setReleaseReason("");
+    setErrorMessage("");
+    setSuccessMessage("");
+  }
+
+  function closeReleasePanel() {
+    setSelectedReleaseWorkOrder(null);
+    setReleaseReason("");
   }
 
   async function handlePlanWorkOrder(event: FormEvent<HTMLFormElement>) {
@@ -199,6 +274,74 @@ export function WorkOrders() {
     }
   }
 
+  async function handleAddTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedTaskWorkOrder) return;
+
+    setAddingTask(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      await addWorkOrderTask({
+        workOrderId: selectedTaskWorkOrder.id,
+        title: taskTitle,
+        description: taskDescription.trim() || null,
+        responseType: taskResponseType,
+        isRequired: taskIsRequired,
+        requiresPhoto: taskRequiresPhoto,
+        sortOrder: selectedTaskWorkOrder.tasks_count + 1,
+      });
+
+      setSuccessMessage("Subtarefa adicionada com sucesso.");
+      closeTaskPanel();
+
+      await loadData();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao adicionar subtarefa.";
+
+      setErrorMessage(message);
+    } finally {
+      setAddingTask(false);
+    }
+  }
+
+  async function handleReleaseWorkOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedReleaseWorkOrder) return;
+
+    if (selectedReleaseWorkOrder.status !== "planned") {
+      setErrorMessage("Apenas OS planejadas podem ser liberadas.");
+      return;
+    }
+
+    setReleasing(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      await releaseWorkOrder({
+        workOrderId: selectedReleaseWorkOrder.id,
+        reason: releaseReason.trim() || null,
+      });
+
+      setSuccessMessage("OS liberada para execução com sucesso.");
+      closeReleasePanel();
+
+      await loadData();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao liberar OS.";
+
+      setErrorMessage(message);
+    } finally {
+      setReleasing(false);
+    }
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -206,8 +349,8 @@ export function WorkOrders() {
           <span className={styles.eyebrow}>Execução operacional</span>
           <h1>Ordens de Serviço</h1>
           <p>
-            Liste, filtre e planeje ordens de serviço do workspace{" "}
-            <strong>{currentWorkspace?.workspace_name}</strong>.
+            Liste, filtre, planeje, crie subtarefas e libere ordens de serviço
+            do workspace <strong>{currentWorkspace?.workspace_name}</strong>.
           </p>
         </div>
 
@@ -304,6 +447,142 @@ export function WorkOrders() {
               <button type="submit" className={styles.primaryButton} disabled={planning}>
                 <CalendarClock size={16} />
                 {planning ? "Planejando..." : "Salvar planejamento"}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {selectedTaskWorkOrder && (
+        <section className={styles.formCard}>
+          <div className={styles.formHeader}>
+            <div>
+              <span>Checklist</span>
+              <h2>Adicionar subtarefa</h2>
+              <p>
+                OS {selectedTaskWorkOrder.work_order_code} ·{" "}
+                {selectedTaskWorkOrder.asset_code} -{" "}
+                {selectedTaskWorkOrder.asset_name}
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleAddTask} className={styles.form}>
+            <label className={styles.fullField}>
+              Título da subtarefa
+              <input
+                value={taskTitle}
+                onChange={(event) => setTaskTitle(event.target.value)}
+                placeholder="Ex: Testar funcionamento após reparo"
+                required
+              />
+            </label>
+
+            <label>
+              Tipo de resposta
+              <select
+                value={taskResponseType}
+                onChange={(event) =>
+                  setTaskResponseType(event.target.value as TaskResponseType)
+                }
+              >
+                <option value="checkbox">Checkbox</option>
+                <option value="text">Texto</option>
+                <option value="number">Número</option>
+                <option value="boolean">Sim/Não</option>
+                <option value="compliance">Conformidade</option>
+                <option value="photo">Foto</option>
+              </select>
+            </label>
+
+            <label>
+              Obrigatória?
+              <select
+                value={taskIsRequired ? "yes" : "no"}
+                onChange={(event) => setTaskIsRequired(event.target.value === "yes")}
+              >
+                <option value="yes">Sim</option>
+                <option value="no">Não</option>
+              </select>
+            </label>
+
+            <label>
+              Exige foto?
+              <select
+                value={taskRequiresPhoto ? "yes" : "no"}
+                onChange={(event) =>
+                  setTaskRequiresPhoto(event.target.value === "yes")
+                }
+              >
+                <option value="no">Não</option>
+                <option value="yes">Sim</option>
+              </select>
+            </label>
+
+            <label className={styles.fullField}>
+              Descrição
+              <textarea
+                value={taskDescription}
+                onChange={(event) => setTaskDescription(event.target.value)}
+                rows={3}
+                placeholder="Detalhe como a subtarefa deve ser verificada."
+              />
+            </label>
+
+            <div className={styles.formActions}>
+              <button
+                type="button"
+                className={styles.cancelButton}
+                onClick={closeTaskPanel}
+              >
+                Cancelar
+              </button>
+
+              <button type="submit" className={styles.primaryButton} disabled={addingTask}>
+                <ListChecks size={16} />
+                {addingTask ? "Adicionando..." : "Adicionar subtarefa"}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {selectedReleaseWorkOrder && (
+        <section className={styles.formCard}>
+          <div className={styles.formHeader}>
+            <div>
+              <span>Liberação</span>
+              <h2>Liberar OS {selectedReleaseWorkOrder.work_order_code}</h2>
+              <p>
+                Após liberar, a ordem ficará disponível para início da execução
+                técnica.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleReleaseWorkOrder} className={styles.form}>
+            <label className={styles.fullField}>
+              Observação da liberação
+              <textarea
+                value={releaseReason}
+                onChange={(event) => setReleaseReason(event.target.value)}
+                rows={3}
+                placeholder="Ex: OS liberada conforme programação aprovada."
+              />
+            </label>
+
+            <div className={styles.formActions}>
+              <button
+                type="button"
+                className={styles.cancelButton}
+                onClick={closeReleasePanel}
+              >
+                Cancelar
+              </button>
+
+              <button type="submit" className={styles.primaryButton} disabled={releasing}>
+                <Send size={16} />
+                {releasing ? "Liberando..." : "Liberar para execução"}
               </button>
             </div>
           </form>
@@ -407,11 +686,27 @@ export function WorkOrders() {
                     </button>
                   )}
 
+                  {(order.status === "waiting_planning" ||
+                    order.status === "planned") && (
+                      <button
+                        type="button"
+                        className={styles.actionButton}
+                        onClick={() => openTaskPanel(order)}
+                      >
+                        <ListChecks size={16} />
+                        Subtarefa
+                      </button>
+                    )}
+
                   {order.status === "planned" && (
-                    <span className={styles.infoPill}>
-                      <Clock size={15} />
-                      Pronta para liberação
-                    </span>
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      onClick={() => openReleasePanel(order)}
+                    >
+                      <Send size={16} />
+                      Liberar
+                    </button>
                   )}
 
                   {order.status === "released" && (

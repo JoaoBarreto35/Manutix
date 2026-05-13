@@ -1,6 +1,8 @@
 import { supabase } from "../lib/supabase";
 import type {
+  AddWorkOrderTaskInput,
   PlanWorkOrderInput,
+  ReleaseWorkOrderInput,
   WorkOrderListItem,
   WorkOrderStatus,
 } from "../types/workOrder";
@@ -50,6 +52,43 @@ export async function planWorkOrder(input: PlanWorkOrderInput): Promise<void> {
     target_scheduled_end_at: input.scheduledEndAt,
     target_estimated_duration_minutes: input.estimatedDurationMinutes,
     target_reason: input.note,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function addWorkOrderTask(
+  input: AddWorkOrderTaskInput
+): Promise<string> {
+  const { data, error } = await supabase.rpc("add_work_order_task", {
+    target_work_order_id: input.workOrderId,
+    target_title: input.title,
+    target_description: input.description,
+    target_response_type: input.responseType,
+    target_is_required: input.isRequired,
+    target_requires_photo: input.requiresPhoto,
+    target_sort_order: input.sortOrder,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Não foi possível adicionar a subtarefa.");
+  }
+
+  return data as string;
+}
+
+export async function releaseWorkOrder(
+  input: ReleaseWorkOrderInput
+): Promise<void> {
+  const { error } = await supabase.rpc("release_work_order", {
+    target_work_order_id: input.workOrderId,
+    target_reason: input.reason,
   });
 
   if (error) {

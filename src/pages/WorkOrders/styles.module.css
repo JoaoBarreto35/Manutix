@@ -437,3 +437,10 @@
     align-items: stretch;
   }
 }
+.actionButton:hover {
+  filter: brightness(0.98);
+}
+
+.form select {
+  cursor: pointer;
+}
