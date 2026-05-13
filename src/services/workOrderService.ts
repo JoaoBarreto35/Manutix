@@ -9,6 +9,7 @@ import type {
   StartWorkOrderParticipationInput,
   ValidateWorkOrderInput,
   WorkOrderListItem,
+  WorkOrderReport,
   WorkOrderStatus,
   WorkOrderTask,
 } from "../types/workOrder";
@@ -63,6 +64,22 @@ export async function getWorkOrderTasks(
   }
 
   return (data ?? []) as WorkOrderTask[];
+}
+
+export async function getWorkOrderReport(
+  workOrderId: string
+): Promise<WorkOrderReport | null> {
+  const { data, error } = await supabase
+    .from("v_work_order_report")
+    .select("*")
+    .eq("id", workOrderId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as WorkOrderReport | null;
 }
 
 export async function planWorkOrder(input: PlanWorkOrderInput): Promise<void> {
@@ -130,6 +147,7 @@ export async function startWorkOrderParticipation(
     throw new Error(error.message);
   }
 }
+
 export async function finishWorkOrderParticipation(
   input: FinishWorkOrderParticipationInput
 ): Promise<void> {
@@ -175,6 +193,7 @@ export async function finishWorkOrder(input: FinishWorkOrderInput): Promise<void
     throw new Error(error.message);
   }
 }
+
 export async function validateWorkOrder(
   input: ValidateWorkOrderInput
 ): Promise<void> {

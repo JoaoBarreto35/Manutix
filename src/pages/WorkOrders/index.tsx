@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CalendarClock,
   CheckCircle2,
+  FileText,
   Filter,
   ListChecks,
   PlayCircle,
@@ -19,6 +20,7 @@ import {
   completeWorkOrderTask,
   finishWorkOrder,
   finishWorkOrderParticipation,
+  getWorkOrderReport,
   getWorkOrderTasks,
   getWorkOrders,
   planWorkOrder,
@@ -32,6 +34,7 @@ import type {
   PriorityLevel,
   TaskResponseType,
   WorkOrderListItem,
+  WorkOrderReport,
   WorkOrderStatus,
   WorkOrderTask,
   WorkOrderValidationResult,
@@ -84,6 +87,11 @@ const finalResultLabels: Record<FinalResult, string> = {
   requires_new_work_order: "Requer nova OS",
 };
 
+const validationResultLabels: Record<WorkOrderValidationResult, string> = {
+  approved: "Aprovada",
+  rejected: "Reprovada",
+};
+
 function formatDateTime(value: string | null): string {
   if (!value) return "Não definido";
 
@@ -91,6 +99,18 @@ function formatDateTime(value: string | null): string {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function formatMinutes(minutes: number | null): string {
+  if (!minutes || minutes <= 0) return "0min";
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (hours === 0) return `${remainingMinutes}min`;
+  if (remainingMinutes === 0) return `${hours}h`;
+
+  return `${hours}h ${remainingMinutes}min`;
 }
 
 function getDefaultStartDateTime(): string {
@@ -109,6 +129,18 @@ function getDefaultEndDateTime(): string {
 
 function toIsoFromLocalInput(value: string): string {
   return new Date(value).toISOString();
+}
+
+function stringifyValue(value: unknown): string {
+  if (value === null || value === undefined) return "-";
+
+  if (typeof value === "string") return value;
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 export function WorkOrders() {
@@ -134,6 +166,12 @@ export function WorkOrders() {
 
   const [selectedValidationWorkOrder, setSelectedValidationWorkOrder] =
     useState<WorkOrderListItem | null>(null);
+
+  const [selectedReportWorkOrder, setSelectedReportWorkOrder] =
+    useState<WorkOrderListItem | null>(null);
+
+  const [workOrderReport, setWorkOrderReport] =
+    useState<WorkOrderReport | null>(null);
 
   const [executionTasks, setExecutionTasks] = useState<WorkOrderTask[]>([]);
 
@@ -179,6 +217,7 @@ export function WorkOrders() {
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [finishingOrder, setFinishingOrder] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [loadingReport, setLoadingReport] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -231,6 +270,8 @@ export function WorkOrders() {
     setSelectedReleaseWorkOrder(null);
     setSelectedExecutionWorkOrder(null);
     setSelectedValidationWorkOrder(null);
+    setSelectedReportWorkOrder(null);
+    setWorkOrderReport(null);
   }
 
   function openPlanningPanel(workOrder: WorkOrderListItem) {
@@ -347,6 +388,37 @@ export function WorkOrders() {
     setValidationResult("approved");
     setValidationComment("");
     setRejectionReason("");
+  }
+
+  async function openReportPanel(workOrder: WorkOrderListItem) {
+    closeAllPanels();
+
+    setSelectedReportWorkOrder(workOrder);
+    setWorkOrderReport(null);
+    setLoadingReport(true);
+
+    clearMessages();
+
+    try {
+      const report = await getWorkOrderReport(workOrder.id);
+      setWorkOrderReport(report);
+
+      if (!report) {
+        setErrorMessage("Relatório não encontrado para esta OS.");
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao carregar relatório.";
+
+      setErrorMessage(message);
+    } finally {
+      setLoadingReport(false);
+    }
+  }
+
+  function closeReportPanel() {
+    setSelectedReportWorkOrder(null);
+    setWorkOrderReport(null);
   }
 
   async function refreshExecutionTasks() {
@@ -641,8 +713,8 @@ export function WorkOrders() {
           <span className={styles.eyebrow}>Execução operacional</span>
           <h1>Ordens de Serviço</h1>
           <p>
-            Liste, filtre, planeje, crie subtarefas, libere, execute e valide
-            ordens de serviço do workspace{" "}
+            Liste, filtre, planeje, crie subtarefas, libere, execute, valide e
+            consulte relatórios das ordens de serviço do workspace{" "}
             <strong>{currentWorkspace?.workspace_name}</strong>.
           </p>
         </div>
@@ -1192,6 +1264,329 @@ export function WorkOrders() {
         </section>
       )}
 
+      {selectedReportWorkOrder && (
+        <section className={styles.reportCard}>
+          <div className={styles.reportHeader}>
+            <div>
+              <span>Relatório da OS</span>
+              <h2>{selectedReportWorkOrder.work_order_code}</h2>
+              <p>{selectedReportWorkOrder.title}</p>
+            </div>
+
+            <button
+              type="button"
+              className={styles.cancelButton}
+              onClick={closeReportPanel}
+            >
+              Fechar relatório
+            </button>
+          </div>
+
+          {loadingReport ? (
+            <div className={styles.emptyState}>Carregando relatório...</div>
+          ) : workOrderReport ? (
+            <div className={styles.reportGrid}>
+              <section className={styles.reportSection}>
+                <h3>Dados principais</h3>
+
+                <div className={styles.reportInfoGrid}>
+                  <span>Status</span>
+                  <strong>{statusLabels[workOrderReport.status]}</strong>
+
+                  <span>Tipo</span>
+                  <strong>
+                    {maintenanceTypeLabels[workOrderReport.maintenance_type]}
+                  </strong>
+
+                  <span>Prioridade</span>
+                  <strong>{priorityLabels[workOrderReport.priority]}</strong>
+
+                  <span>Origem</span>
+                  <strong>{workOrderReport.origin}</strong>
+
+                  <span>Prazo calculado</span>
+                  <strong>{formatDateTime(workOrderReport.calculated_due_at)}</strong>
+
+                  <span>Início programado</span>
+                  <strong>{formatDateTime(workOrderReport.scheduled_start_at)}</strong>
+
+                  <span>Fim programado</span>
+                  <strong>{formatDateTime(workOrderReport.scheduled_end_at)}</strong>
+
+                  <span>Início real</span>
+                  <strong>{formatDateTime(workOrderReport.actual_started_at)}</strong>
+
+                  <span>Fim real</span>
+                  <strong>{formatDateTime(workOrderReport.actual_finished_at)}</strong>
+
+                  <span>HH total</span>
+                  <strong>
+                    {formatMinutes(workOrderReport.total_labor_minutes)}
+                  </strong>
+
+                  <span>Duração calendário</span>
+                  <strong>
+                    {formatMinutes(workOrderReport.calendar_duration_minutes)}
+                  </strong>
+                </div>
+              </section>
+
+              <section className={styles.reportSection}>
+                <h3>Ativo/local</h3>
+
+                <div className={styles.reportInfoGrid}>
+                  <span>Código</span>
+                  <strong>{workOrderReport.asset.code}</strong>
+
+                  <span>Nome</span>
+                  <strong>{workOrderReport.asset.name}</strong>
+
+                  <span>Tipo</span>
+                  <strong>{workOrderReport.asset.type_name}</strong>
+
+                  <span>Natureza</span>
+                  <strong>{workOrderReport.asset.kind}</strong>
+
+                  <span>Criticidade</span>
+                  <strong>{workOrderReport.asset.criticality}</strong>
+                </div>
+              </section>
+
+              {workOrderReport.service_request && (
+                <section className={styles.reportSection}>
+                  <h3>Chamado de origem</h3>
+
+                  <div className={styles.reportInfoGrid}>
+                    <span>Código</span>
+                    <strong>{workOrderReport.service_request.code}</strong>
+
+                    <span>Solicitante</span>
+                    <strong>
+                      {workOrderReport.service_request.opened_by_name ||
+                        "Usuário"}
+                    </strong>
+
+                    <span>Problema</span>
+                    <strong>
+                      {workOrderReport.service_request.problem ||
+                        workOrderReport.service_request.problem_other_text ||
+                        "Não informado"}
+                    </strong>
+
+                    <span>Abertura</span>
+                    <strong>
+                      {formatDateTime(workOrderReport.service_request.created_at)}
+                    </strong>
+                  </div>
+
+                  <p className={styles.reportText}>
+                    {workOrderReport.service_request.description}
+                  </p>
+                </section>
+              )}
+
+              {workOrderReport.preventive && (
+                <section className={styles.reportSection}>
+                  <h3>Preventiva</h3>
+
+                  <div className={styles.reportInfoGrid}>
+                    <span>Plano</span>
+                    <strong>{workOrderReport.preventive.plan_name}</strong>
+
+                    <span>Tarefa</span>
+                    <strong>{workOrderReport.preventive.task_name}</strong>
+
+                    <span>Vencimento</span>
+                    <strong>{workOrderReport.preventive.due_date}</strong>
+                  </div>
+                </section>
+              )}
+
+              <section className={styles.reportSection}>
+                <h3>Execução</h3>
+
+                <div className={styles.reportTextGroup}>
+                  <div>
+                    <span>Descrição do serviço</span>
+                    <p>
+                      {workOrderReport.execution_description ||
+                        "Não informado."}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span>Causa identificada</span>
+                    <p>{workOrderReport.identified_cause || "Não informado."}</p>
+                  </div>
+
+                  <div>
+                    <span>Solução aplicada</span>
+                    <p>{workOrderReport.solution_applied || "Não informado."}</p>
+                  </div>
+
+                  <div>
+                    <span>Resultado</span>
+                    <p>
+                      {workOrderReport.result
+                        ? finalResultLabels[workOrderReport.result]
+                        : "Não informado."}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span>Materiais utilizados</span>
+                    <p>{workOrderReport.materials_used || "Não informado."}</p>
+                  </div>
+
+                  <div>
+                    <span>Observações internas</span>
+                    <p>{workOrderReport.internal_notes || "Não informado."}</p>
+                  </div>
+                </div>
+              </section>
+
+              <section className={styles.reportSection}>
+                <h3>Equipe</h3>
+
+                {workOrderReport.assignments &&
+                  workOrderReport.assignments.length > 0 ? (
+                  <div className={styles.reportList}>
+                    {workOrderReport.assignments.map((assignment) => (
+                      <article key={assignment.assignment_id}>
+                        <strong>{assignment.user_name || "Usuário"}</strong>
+                        <span>
+                          {assignment.is_primary
+                            ? "Responsável principal"
+                            : "Apoio"}{" "}
+                          · {assignment.status} ·{" "}
+                          {formatMinutes(assignment.total_minutes)}
+                        </span>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={styles.mutedText}>Nenhuma equipe vinculada.</p>
+                )}
+              </section>
+
+              <section className={styles.reportSection}>
+                <h3>Checklist/Subtarefas</h3>
+
+                {workOrderReport.tasks && workOrderReport.tasks.length > 0 ? (
+                  <div className={styles.reportList}>
+                    {workOrderReport.tasks.map((task) => (
+                      <article key={task.id}>
+                        <strong>{task.title}</strong>
+                        <span>
+                          {responseTypeLabels[task.response_type]} ·{" "}
+                          {task.is_required ? "Obrigatória" : "Opcional"} ·{" "}
+                          {task.status === "completed"
+                            ? "Concluída"
+                            : task.status === "not_applicable"
+                              ? "Não aplicável"
+                              : "Pendente"}
+                        </span>
+                        {task.description && <p>{task.description}</p>}
+                        {task.completed_at && (
+                          <small>
+                            Concluída por{" "}
+                            {task.completed_by_name || "Usuário"} em{" "}
+                            {formatDateTime(task.completed_at)}
+                          </small>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={styles.mutedText}>Nenhuma subtarefa cadastrada.</p>
+                )}
+              </section>
+
+              <section className={styles.reportSection}>
+                <h3>Anexos/Evidências</h3>
+
+                {workOrderReport.attachments &&
+                  workOrderReport.attachments.length > 0 ? (
+                  <div className={styles.reportList}>
+                    {workOrderReport.attachments.map((attachment) => (
+                      <article key={attachment.id}>
+                        <strong>{attachment.file_name}</strong>
+                        <span>
+                          {attachment.attachment_type} ·{" "}
+                          {formatDateTime(attachment.created_at)}
+                        </span>
+                        {attachment.description && (
+                          <p>{attachment.description}</p>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={styles.mutedText}>Nenhum anexo cadastrado.</p>
+                )}
+              </section>
+
+              <section className={styles.reportSection}>
+                <h3>Validações</h3>
+
+                {workOrderReport.validations &&
+                  workOrderReport.validations.length > 0 ? (
+                  <div className={styles.reportList}>
+                    {workOrderReport.validations.map((validation) => (
+                      <article key={validation.id}>
+                        <strong>
+                          {validationResultLabels[validation.validation_result]}
+                        </strong>
+                        <span>
+                          {validation.validation_type} ·{" "}
+                          {validation.validated_by_name || "Usuário"} ·{" "}
+                          {formatDateTime(validation.created_at)}
+                        </span>
+                        {validation.rejection_reason && (
+                          <p>Motivo: {validation.rejection_reason}</p>
+                        )}
+                        {validation.comment && <p>{validation.comment}</p>}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={styles.mutedText}>Nenhuma validação registrada.</p>
+                )}
+              </section>
+
+              <section className={styles.reportSectionFull}>
+                <h3>Histórico</h3>
+
+                {workOrderReport.history && workOrderReport.history.length > 0 ? (
+                  <div className={styles.reportList}>
+                    {workOrderReport.history.map((history) => (
+                      <article key={history.id}>
+                        <strong>{history.action}</strong>
+                        <span>
+                          {history.performed_by_name || "Sistema"} ·{" "}
+                          {formatDateTime(history.created_at)}
+                        </span>
+                        {history.reason && <p>{history.reason}</p>}
+                        {(history.old_value || history.new_value) && (
+                          <small>
+                            De: {stringifyValue(history.old_value)} | Para:{" "}
+                            {stringifyValue(history.new_value)}
+                          </small>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={styles.mutedText}>Nenhum histórico registrado.</p>
+                )}
+              </section>
+            </div>
+          ) : (
+            <div className={styles.emptyState}>Relatório não encontrado.</div>
+          )}
+        </section>
+      )}
+
       <section className={styles.filters}>
         <form onSubmit={handleSearchSubmit} className={styles.searchBox}>
           <Search size={18} />
@@ -1355,6 +1750,19 @@ export function WorkOrders() {
                       Validar OS
                     </button>
                   )}
+
+                  {(order.status === "waiting_validation" ||
+                    order.status === "closed" ||
+                    order.status === "rejected_by_client") && (
+                      <button
+                        type="button"
+                        className={styles.actionButton}
+                        onClick={() => openReportPanel(order)}
+                      >
+                        <FileText size={16} />
+                        Relatório
+                      </button>
+                    )}
 
                   {order.primary_user_id && (
                     <span className={styles.infoPill}>

@@ -65,7 +65,9 @@
   border: 1px solid var(--color-border);
 }
 
-.primaryButton:disabled {
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.cancelButton:disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }
@@ -92,7 +94,8 @@
   font-weight: 800;
 }
 
-.formCard {
+.formCard,
+.reportCard {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 24px;
@@ -100,19 +103,22 @@
   box-shadow: var(--shadow-card);
 }
 
-.formHeader span {
+.formHeader span,
+.reportHeader span {
   color: var(--color-primary);
   font-size: 13px;
   font-weight: 900;
 }
 
-.formHeader h2 {
+.formHeader h2,
+.reportHeader h2 {
   margin-top: 6px;
   margin-bottom: 8px;
   font-size: 24px;
 }
 
-.formHeader p {
+.formHeader p,
+.reportHeader p {
   color: var(--color-muted);
   margin-bottom: 20px;
 }
@@ -145,6 +151,10 @@
   cursor: not-allowed;
 }
 
+.form select {
+  cursor: pointer;
+}
+
 .form textarea {
   resize: vertical;
 }
@@ -158,6 +168,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  margin-top: 14px;
 }
 
 .filters {
@@ -381,6 +392,10 @@
   cursor: pointer;
 }
 
+.actionButton:hover {
+  filter: brightness(0.98);
+}
+
 .infoPill {
   border-radius: 999px;
   padding: 8px 10px;
@@ -404,46 +419,6 @@
   font-weight: 800;
 }
 
-@media (max-width: 1024px) {
-  .header,
-  .filters {
-    flex-direction: column;
-  }
-
-  .form {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .filterGroup {
-    flex-wrap: wrap;
-  }
-}
-
-@media (max-width: 720px) {
-  .form {
-    grid-template-columns: 1fr;
-  }
-
-  .orderTop {
-    flex-direction: column;
-  }
-
-  .badges {
-    justify-content: flex-start;
-  }
-
-  .searchBox {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-.actionButton:hover {
-  filter: brightness(0.98);
-}
-
-.form select {
-  cursor: pointer;
-}
 .executionBlock {
   border: 1px solid var(--color-border);
   background: var(--color-background);
@@ -510,4 +485,164 @@
 .mutedText {
   color: var(--color-muted);
   font-weight: 700;
+}
+
+.reportHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.reportGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.reportSection,
+.reportSectionFull {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.reportSectionFull {
+  grid-column: 1 / -1;
+}
+
+.reportSection h3,
+.reportSectionFull h3 {
+  font-size: 18px;
+  margin-bottom: 14px;
+}
+
+.reportInfoGrid {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 10px 14px;
+}
+
+.reportInfoGrid span {
+  color: var(--color-muted);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.reportInfoGrid strong {
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.reportText {
+  color: var(--color-muted);
+  line-height: 1.6;
+  margin-top: 14px;
+}
+
+.reportTextGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.reportTextGroup span {
+  display: block;
+  color: var(--color-muted);
+  font-weight: 900;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.reportTextGroup p {
+  color: var(--color-text);
+  line-height: 1.6;
+}
+
+.reportList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reportList article {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.reportList strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.reportList span {
+  display: block;
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.reportList p {
+  margin-top: 8px;
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.reportList small {
+  display: block;
+  margin-top: 8px;
+  color: var(--color-muted);
+  word-break: break-word;
+}
+
+@media (max-width: 1024px) {
+  .header,
+  .filters,
+  .reportHeader {
+    flex-direction: column;
+  }
+
+  .form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filterGroup {
+    flex-wrap: wrap;
+  }
+
+  .reportGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .reportSectionFull {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .form {
+    grid-template-columns: 1fr;
+  }
+
+  .orderTop,
+  .taskItem {
+    flex-direction: column;
+  }
+
+  .badges {
+    justify-content: flex-start;
+  }
+
+  .searchBox {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .reportInfoGrid {
+    grid-template-columns: 1fr;
+  }
 }
