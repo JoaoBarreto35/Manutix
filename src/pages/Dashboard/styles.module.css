@@ -1,0 +1,72 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.header {
+  background: linear-gradient(135deg, var(--color-primary), #0f172a);
+  color: white;
+  padding: 32px;
+  border-radius: 28px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  margin-bottom: 12px;
+  font-weight: 900;
+  opacity: 0.8;
+}
+
+.header h1 {
+  font-size: 34px;
+  margin-bottom: 8px;
+}
+
+.header p {
+  max-width: 680px;
+  line-height: 1.6;
+  opacity: 0.9;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow: var(--shadow-card);
+}
+
+.card span {
+  color: var(--color-muted);
+  font-weight: 800;
+}
+
+.card strong {
+  display: block;
+  font-size: 34px;
+  margin: 14px 0 6px;
+}
+
+.card p {
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+@media (max-width: 1100px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

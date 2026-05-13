@@ -1,0 +1,123 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.16), transparent 32%),
+    var(--color-background);
+}
+
+.card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 28px;
+  padding: 32px;
+  box-shadow: var(--shadow-card);
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.logo {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  border-radius: 18px;
+  background: var(--color-primary);
+  color: white;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.header h1 {
+  font-size: 30px;
+  margin-bottom: 8px;
+}
+
+.header p {
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--color-background);
+  padding: 5px;
+  border-radius: 16px;
+  margin-bottom: 24px;
+}
+
+.tabs button {
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  font-weight: 800;
+  padding: 11px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.tabs button.active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form label {
+  font-weight: 700;
+  color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form input {
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 13px 14px;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-size: 15px;
+}
+
+.form input:focus {
+  outline: 2px solid var(--color-primary-light);
+  border-color: var(--color-primary);
+}
+
+.form button[type="submit"] {
+  border: none;
+  background: var(--color-primary);
+  color: white;
+  border-radius: 14px;
+  padding: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.form button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.message {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 14px;
+}
