@@ -9,6 +9,7 @@ import type {
   ReleaseWorkOrderInput,
   ReopenRejectedWorkOrderInput,
   StartWorkOrderParticipationInput,
+  UpdateWorkOrderDetailsInput,
   ValidateWorkOrderInput,
   WorkOrderListItem,
   WorkOrderReport,
@@ -134,6 +135,24 @@ export async function getWorkOrderReport(
   }
 
   return data as WorkOrderReport | null;
+}
+
+
+export async function updateWorkOrderDetails(
+  input: UpdateWorkOrderDetailsInput
+): Promise<void> {
+  const { error } = await supabase.rpc("update_work_order_details", {
+    target_work_order_id: input.workOrderId,
+    target_title: input.title,
+    target_description: input.description,
+    target_priority: input.priority,
+    target_maintenance_type: input.maintenanceType,
+    target_reason: input.reason,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export async function planWorkOrder(input: PlanWorkOrderInput): Promise<void> {

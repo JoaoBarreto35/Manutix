@@ -455,3 +455,113 @@
     grid-template-columns: 1fr;
   }
 }
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.editForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.editForm label,
+.editForm fieldset {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--color-text, #0f172a);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.editForm legend {
+  color: var(--color-text, #0f172a);
+  font-size: 0.78rem;
+  font-weight: 850;
+  padding: 0;
+}
+
+.editForm input,
+.editForm select,
+.editForm textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 0.75rem;
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text, #0f172a);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 650;
+  padding: 0.7rem 0.75rem;
+}
+
+.editForm textarea {
+  resize: vertical;
+}
+
+.fullField {
+  grid-column: 1 / -1;
+}
+
+.formActions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  padding-top: 0.25rem;
+}
+
+.checkboxGroup {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 0.8rem;
+  background: var(--color-background, #f8fafc);
+  padding: 0.65rem;
+}
+
+.checkboxOption {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 0.5rem !important;
+  color: var(--color-muted, #64748b) !important;
+  font-size: 0.82rem !important;
+  font-weight: 750 !important;
+}
+
+.checkboxOption input {
+  width: auto;
+  min-width: auto;
+}
+
+.readOnlyNotice {
+  margin: 0;
+  border: 1px dashed var(--color-border, #e5e7eb);
+  border-radius: 0.8rem;
+  background: var(--color-soft, #f1f5f9);
+  color: var(--color-muted, #64748b);
+  font-size: 0.8rem;
+  font-weight: 750;
+  padding: 0.7rem;
+}
+
+@media (max-width: 720px) {
+  .sectionHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .editForm {
+    grid-template-columns: 1fr;
+  }
+}

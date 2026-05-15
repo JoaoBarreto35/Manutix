@@ -141,6 +141,16 @@ export type PlanWorkOrderInput = {
   note: string | null;
 };
 
+
+export type UpdateWorkOrderDetailsInput = {
+  workOrderId: string;
+  title: string;
+  description: string | null;
+  priority: PriorityLevel;
+  maintenanceType: MaintenanceType;
+  reason: string | null;
+};
+
 export type AddWorkOrderTaskInput = {
   workOrderId: string;
   title: string;

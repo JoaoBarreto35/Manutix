@@ -15,11 +15,14 @@ import {
   releaseWorkOrder,
   reopenRejectedWorkOrder,
   startWorkOrderParticipation,
+  updateWorkOrderDetails,
   validateWorkOrder,
 } from "../../services/workOrderService";
 import type {
   FinalResult,
   TaskResponseType,
+  UpdateWorkOrderDetailsInput,
+  PlanWorkOrderInput,
   WorkOrderListItem,
   WorkOrderReport,
   WorkOrderTask,
@@ -126,6 +129,8 @@ export function WorkOrders() {
   const [loading, setLoading] = useState(true);
   const [loadingOperationalMembers, setLoadingOperationalMembers] = useState(false);
   const [planning, setPlanning] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [savingDrawerPlanning, setSavingDrawerPlanning] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
   const [applyingStandardTasks, setApplyingStandardTasks] = useState(false);
   const [releasing, setReleasing] = useState(false);
@@ -248,6 +253,101 @@ export function WorkOrders() {
   function closeDetailsDrawer() {
     setSelectedDetailsWorkOrder(null);
     setWorkOrderDetailsReport(null);
+  }
+
+
+  async function refreshDetailsDrawer(workOrderId: string) {
+    const report = await getWorkOrderReport(workOrderId);
+    setWorkOrderDetailsReport(report);
+  }
+
+  async function handleUpdateWorkOrderDetailsFromDrawer(
+    input: UpdateWorkOrderDetailsInput
+  ) {
+    setSavingDetails(true);
+    clearMessages();
+
+    try {
+      await updateWorkOrderDetails(input);
+
+      setSelectedDetailsWorkOrder((current) => {
+        if (!current || current.id !== input.workOrderId) return current;
+
+        return {
+          ...current,
+          title: input.title,
+          description: input.description ?? "",
+          priority: input.priority,
+          maintenance_type: input.maintenanceType,
+        };
+      });
+
+      await refreshDetailsDrawer(input.workOrderId);
+      await loadData();
+      setSuccessMessage("Dados principais da OS atualizados com sucesso.");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao atualizar dados principais da OS.";
+
+      setErrorMessage(message);
+      throw error;
+    } finally {
+      setSavingDetails(false);
+    }
+  }
+
+  async function handleUpdatePlanningFromDrawer(input: PlanWorkOrderInput) {
+    if (new Date(input.scheduledEndAt) <= new Date(input.scheduledStartAt)) {
+      setErrorMessage("A data final precisa ser maior que a data inicial.");
+      throw new Error("A data final precisa ser maior que a data inicial.");
+    }
+
+    if (!input.primaryUserId) {
+      setErrorMessage("Selecione o responsável principal da OS.");
+      throw new Error("Selecione o responsável principal da OS.");
+    }
+
+    setSavingDrawerPlanning(true);
+    clearMessages();
+
+    try {
+      await planWorkOrder(input);
+
+      const primaryMember = operationalMembers.find(
+        (member) => member.userId === input.primaryUserId
+      );
+      const primaryName =
+        primaryMember?.fullName?.trim() || primaryMember?.email || "Responsável definido";
+
+      setSelectedDetailsWorkOrder((current) => {
+        if (!current || current.id !== input.workOrderId) return current;
+
+        return {
+          ...current,
+          status: current.status === "waiting_planning" ? "planned" : current.status,
+          primary_user_id: input.primaryUserId,
+          primary_user_name: primaryName,
+          scheduled_start_at: input.scheduledStartAt,
+          scheduled_end_at: input.scheduledEndAt,
+          estimated_duration_minutes: input.estimatedDurationMinutes,
+          assigned_users_count: 1 + input.supportUserIds.length,
+        };
+      });
+
+      await refreshDetailsDrawer(input.workOrderId);
+      await loadData();
+      setSuccessMessage("Planejamento da OS atualizado com sucesso.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao atualizar planejamento da OS.";
+
+      setErrorMessage(message);
+      throw error;
+    } finally {
+      setSavingDrawerPlanning(false);
+    }
   }
 
   function openPlanningPanel(workOrder: WorkOrderListItem) {
@@ -512,8 +612,7 @@ export function WorkOrders() {
         );
       } else {
         setSuccessMessage(
-          `${insertedTasks} subtarefa${insertedTasks > 1 ? "s" : ""} padrão aplicada${
-            insertedTasks > 1 ? "s" : ""
+          `${insertedTasks} subtarefa${insertedTasks > 1 ? "s" : ""} padrão aplicada${insertedTasks > 1 ? "s" : ""
           } com sucesso.`
         );
       }
@@ -780,7 +879,13 @@ export function WorkOrders() {
         workOrder={selectedDetailsWorkOrder}
         report={workOrderDetailsReport}
         loading={loadingDetails}
+        members={operationalMembers}
+        loadingMembers={loadingOperationalMembers}
+        savingDetails={savingDetails}
+        savingPlanning={savingDrawerPlanning}
         onClose={closeDetailsDrawer}
+        onUpdateDetails={handleUpdateWorkOrderDetailsFromDrawer}
+        onUpdatePlanning={handleUpdatePlanningFromDrawer}
       />
 
       <WorkOrderPlanningPanel
@@ -902,7 +1007,7 @@ export function WorkOrders() {
         <WorkOrdersKanbanBoard
           loading={loading}
           workOrders={workOrders}
-            onPlan={openPlanningPanel}
+          onPlan={openPlanningPanel}
           onAddTask={openTaskPanel}
           onRelease={openReleasePanel}
           onReopenRejected={handleReopenRejectedWorkOrder}
