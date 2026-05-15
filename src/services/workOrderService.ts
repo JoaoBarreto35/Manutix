@@ -1,11 +1,13 @@
 import { supabase } from "../lib/supabase";
 import type {
   AddWorkOrderTaskInput,
+  ApplyStandardWorkOrderTasksInput,
   CompleteWorkOrderTaskInput,
   FinishWorkOrderInput,
   FinishWorkOrderParticipationInput,
   PlanWorkOrderInput,
   ReleaseWorkOrderInput,
+  ReopenRejectedWorkOrderInput,
   StartWorkOrderParticipationInput,
   ValidateWorkOrderInput,
   WorkOrderListItem,
@@ -47,7 +49,59 @@ export async function getWorkOrders(
     throw new Error(error.message);
   }
 
-  return (data ?? []) as WorkOrderListItem[];
+  const workOrders = (data ?? []) as WorkOrderListItem[];
+
+  if (workOrders.length === 0) {
+    return workOrders;
+  }
+
+  const { data: requiredTaskProgress, error: requiredTaskProgressError } =
+    await supabase.rpc("get_work_order_required_task_progress", {
+      target_workspace_id: filters.workspaceId,
+    });
+
+  if (requiredTaskProgressError) {
+    throw new Error(requiredTaskProgressError.message);
+  }
+
+  const requiredTaskProgressByWorkOrder = new Map<
+    string,
+    {
+      requiredTasksCount: number;
+      completedRequiredTasksCount: number;
+      requiredTasksProgressPercent: number;
+    }
+  >();
+
+  for (const progress of requiredTaskProgress ?? []) {
+    requiredTaskProgressByWorkOrder.set(String(progress.work_order_id), {
+      requiredTasksCount: Number(progress.required_tasks_count ?? 0),
+      completedRequiredTasksCount: Number(
+        progress.completed_required_tasks_count ?? 0
+      ),
+      requiredTasksProgressPercent: Number(
+        progress.required_tasks_progress_percent ?? 0
+      ),
+    });
+  }
+
+  return workOrders.map((workOrder) => {
+    const progress = requiredTaskProgressByWorkOrder.get(workOrder.id) ?? {
+      requiredTasksCount: 0,
+      completedRequiredTasksCount: 0,
+      requiredTasksProgressPercent: 0,
+    };
+
+    return {
+      ...workOrder,
+      required_tasks_count: progress.requiredTasksCount,
+      completed_required_tasks_count: progress.completedRequiredTasksCount,
+      required_tasks_progress_percent: Math.max(
+        0,
+        Math.min(100, progress.requiredTasksProgressPercent)
+      ),
+    };
+  });
 }
 
 export async function getWorkOrderTasks(
@@ -122,10 +176,37 @@ export async function addWorkOrderTask(
   return data as string;
 }
 
+export async function applyStandardWorkOrderTasks(
+  input: ApplyStandardWorkOrderTasksInput
+): Promise<number> {
+  const { data, error } = await supabase.rpc("apply_standard_work_order_tasks", {
+    target_work_order_id: input.workOrderId,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Number(data ?? 0);
+}
+
 export async function releaseWorkOrder(
   input: ReleaseWorkOrderInput
 ): Promise<void> {
   const { error } = await supabase.rpc("release_work_order", {
+    target_work_order_id: input.workOrderId,
+    target_reason: input.reason,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function reopenRejectedWorkOrder(
+  input: ReopenRejectedWorkOrderInput
+): Promise<void> {
+  const { error } = await supabase.rpc("reopen_rejected_work_order", {
     target_work_order_id: input.workOrderId,
     target_reason: input.reason,
   });

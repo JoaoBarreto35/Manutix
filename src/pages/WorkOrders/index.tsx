@@ -1,22 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import {
-  AlertTriangle,
-  CalendarClock,
-  CheckCircle2,
-  FileText,
-  Filter,
-  ListChecks,
-  PlayCircle,
-  RefreshCw,
-  Search,
-  Send,
-  UserRound,
-  Wrench,
-} from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
+import { getWorkspaceOperationalMembers, type WorkspaceOperationalMember } from "../../services/workspaceMemberService";
 import {
   addWorkOrderTask,
+  applyStandardWorkOrderTasks,
   completeWorkOrderTask,
   finishWorkOrder,
   finishWorkOrderParticipation,
@@ -25,132 +13,51 @@ import {
   getWorkOrders,
   planWorkOrder,
   releaseWorkOrder,
+  reopenRejectedWorkOrder,
   startWorkOrderParticipation,
   validateWorkOrder,
 } from "../../services/workOrderService";
 import type {
   FinalResult,
-  MaintenanceType,
-  PriorityLevel,
   TaskResponseType,
   WorkOrderListItem,
   WorkOrderReport,
-  WorkOrderStatus,
   WorkOrderTask,
   WorkOrderValidationResult,
 } from "../../types/workOrder";
 import styles from "./styles.module.css";
 
-type StatusFilter = WorkOrderStatus | "all";
-
-const statusLabels: Record<WorkOrderStatus, string> = {
-  waiting_planning: "Aguardando planejamento",
-  planned: "Planejada",
-  released: "Liberada",
-  in_execution: "Em execução",
-  paused: "Pausada",
-  waiting_validation: "Aguardando validação",
-  rejected_by_client: "Rejeitada pelo cliente",
-  closed: "Fechada",
-  cancelled: "Cancelada",
-};
-
-const priorityLabels: Record<PriorityLevel, string> = {
-  low: "Baixa",
-  medium: "Média",
-  high: "Alta",
-  critical: "Crítica",
-};
-
-const maintenanceTypeLabels: Record<MaintenanceType, string> = {
-  corrective: "Corretiva",
-  preventive: "Preventiva",
-  inspection: "Inspeção",
-  improvement: "Melhoria",
-  emergency: "Emergência",
-};
-
-const responseTypeLabels: Record<TaskResponseType, string> = {
-  checkbox: "Checkbox",
-  text: "Texto",
-  number: "Número",
-  boolean: "Sim/Não",
-  compliance: "Conformidade",
-  photo: "Foto",
-};
-
-const finalResultLabels: Record<FinalResult, string> = {
-  resolved: "Resolvido",
-  partially_resolved: "Parcialmente resolvido",
-  not_resolved: "Não resolvido",
-  not_applicable: "Não aplicável",
-  requires_new_work_order: "Requer nova OS",
-};
-
-const validationResultLabels: Record<WorkOrderValidationResult, string> = {
-  approved: "Aprovada",
-  rejected: "Reprovada",
-};
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "Não definido";
-
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
-function formatMinutes(minutes: number | null): string {
-  if (!minutes || minutes <= 0) return "0min";
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-
-  if (hours === 0) return `${remainingMinutes}min`;
-  if (remainingMinutes === 0) return `${hours}h`;
-
-  return `${hours}h ${remainingMinutes}min`;
-}
-
-function getDefaultStartDateTime(): string {
-  const date = new Date();
-  date.setMinutes(date.getMinutes() + 30);
-
-  return date.toISOString().slice(0, 16);
-}
-
-function getDefaultEndDateTime(): string {
-  const date = new Date();
-  date.setHours(date.getHours() + 2);
-
-  return date.toISOString().slice(0, 16);
-}
-
-function toIsoFromLocalInput(value: string): string {
-  return new Date(value).toISOString();
-}
-
-function stringifyValue(value: unknown): string {
-  if (value === null || value === undefined) return "-";
-
-  if (typeof value === "string") return value;
-
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
+import { WorkOrdersFeedback } from "./components/WorkOrdersFeedback";
+import { WorkOrdersFilters } from "./components/WorkOrdersFilters";
+import { WorkOrdersHeader } from "./components/WorkOrdersHeader";
+import { WorkOrderPlanningPanel } from "./components/WorkOrderPlanningPanel";
+import { WorkOrderReleasePanel } from "./components/WorkOrderReleasePanel";
+import { WorkOrderTaskPanel } from "./components/WorkOrderTaskPanel";
+import { WorkOrderValidationPanel } from "./components/WorkOrderValidationPanel";
+import { WorkOrderExecutionPanel } from "./components/WorkOrderExecutionPanel";
+import { WorkOrderReportPanel } from "./components/WorkOrderReportPanel";
+import { WorkOrderDetailsDrawer } from "./components/WorkOrderDetailsDrawer";
+import { WorkOrdersKanbanBoard } from "./components/WorkOrdersKanbanBoard";
+import { WorkOrdersTable } from "./components/WorkOrdersTable";
+import { WorkOrdersViewToggle, type WorkOrdersViewMode } from "./components/WorkOrdersViewToggle";
+import { type StatusFilter } from "./constants/workOrderLabels";
+import {
+  getDefaultEndDateTime,
+  getDefaultStartDateTime,
+  toIsoFromLocalInput,
+} from "./utils/workOrderFormatters";
 
 export function WorkOrders() {
   const { user } = useAuth();
   const { currentWorkspace } = useWorkspace();
 
   const [workOrders, setWorkOrders] = useState<WorkOrderListItem[]>([]);
+  const [operationalMembers, setOperationalMembers] = useState<WorkspaceOperationalMember[]>([]);
+
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [viewMode, setViewMode] = useState<WorkOrdersViewMode>("kanban");
 
   const [selectedWorkOrder, setSelectedWorkOrder] =
     useState<WorkOrderListItem | null>(null);
@@ -170,7 +77,13 @@ export function WorkOrders() {
   const [selectedReportWorkOrder, setSelectedReportWorkOrder] =
     useState<WorkOrderListItem | null>(null);
 
+  const [selectedDetailsWorkOrder, setSelectedDetailsWorkOrder] =
+    useState<WorkOrderListItem | null>(null);
+
   const [workOrderReport, setWorkOrderReport] =
+    useState<WorkOrderReport | null>(null);
+
+  const [workOrderDetailsReport, setWorkOrderDetailsReport] =
     useState<WorkOrderReport | null>(null);
 
   const [executionTasks, setExecutionTasks] = useState<WorkOrderTask[]>([]);
@@ -180,6 +93,8 @@ export function WorkOrders() {
   );
   const [scheduledEndAt, setScheduledEndAt] = useState(getDefaultEndDateTime());
   const [estimatedDurationMinutes, setEstimatedDurationMinutes] = useState(120);
+  const [selectedPrimaryUserId, setSelectedPrimaryUserId] = useState("");
+  const [selectedSupportUserIds, setSelectedSupportUserIds] = useState<string[]>([]);
   const [planningNote, setPlanningNote] = useState("");
 
   const [taskTitle, setTaskTitle] = useState("");
@@ -209,8 +124,10 @@ export function WorkOrders() {
   const [rejectionReason, setRejectionReason] = useState("");
 
   const [loading, setLoading] = useState(true);
+  const [loadingOperationalMembers, setLoadingOperationalMembers] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
+  const [applyingStandardTasks, setApplyingStandardTasks] = useState(false);
   const [releasing, setReleasing] = useState(false);
   const [startingExecution, setStartingExecution] = useState(false);
   const [finishingParticipation, setFinishingParticipation] = useState(false);
@@ -218,12 +135,16 @@ export function WorkOrders() {
   const [finishingOrder, setFinishingOrder] = useState(false);
   const [validating, setValidating] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
   const canPlanSelectedOrder = useMemo(() => {
-    return selectedWorkOrder?.status === "waiting_planning";
+    return (
+      selectedWorkOrder?.status === "waiting_planning" ||
+      selectedWorkOrder?.status === "planned"
+    );
   }, [selectedWorkOrder]);
 
   async function loadData() {
@@ -250,6 +171,33 @@ export function WorkOrders() {
     }
   }
 
+  async function loadOperationalMembers() {
+    if (!currentWorkspace) return;
+
+    setLoadingOperationalMembers(true);
+
+    try {
+      const members = await getWorkspaceOperationalMembers(
+        currentWorkspace.workspace_id
+      );
+
+      setOperationalMembers(members);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao carregar membros do workspace.";
+
+      setErrorMessage(message);
+    } finally {
+      setLoadingOperationalMembers(false);
+    }
+  }
+
+  useEffect(() => {
+    loadOperationalMembers();
+  }, [currentWorkspace?.workspace_id]);
+
   useEffect(() => {
     loadData();
   }, [currentWorkspace?.workspace_id, statusFilter]);
@@ -271,7 +219,35 @@ export function WorkOrders() {
     setSelectedExecutionWorkOrder(null);
     setSelectedValidationWorkOrder(null);
     setSelectedReportWorkOrder(null);
+    setSelectedDetailsWorkOrder(null);
     setWorkOrderReport(null);
+    setWorkOrderDetailsReport(null);
+  }
+
+  async function openDetailsDrawer(workOrder: WorkOrderListItem) {
+    closeAllPanels();
+    clearMessages();
+
+    setSelectedDetailsWorkOrder(workOrder);
+    setWorkOrderDetailsReport(null);
+    setLoadingDetails(true);
+
+    try {
+      const report = await getWorkOrderReport(workOrder.id);
+      setWorkOrderDetailsReport(report);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao carregar detalhes da OS.";
+
+      setErrorMessage(message);
+    } finally {
+      setLoadingDetails(false);
+    }
+  }
+
+  function closeDetailsDrawer() {
+    setSelectedDetailsWorkOrder(null);
+    setWorkOrderDetailsReport(null);
   }
 
   function openPlanningPanel(workOrder: WorkOrderListItem) {
@@ -281,6 +257,8 @@ export function WorkOrders() {
     setScheduledStartAt(getDefaultStartDateTime());
     setScheduledEndAt(getDefaultEndDateTime());
     setEstimatedDurationMinutes(workOrder.estimated_duration_minutes ?? 120);
+    setSelectedPrimaryUserId(workOrder.primary_user_id ?? user?.id ?? "");
+    setSelectedSupportUserIds([]);
     setPlanningNote("");
 
     clearMessages();
@@ -291,6 +269,8 @@ export function WorkOrders() {
     setScheduledStartAt(getDefaultStartDateTime());
     setScheduledEndAt(getDefaultEndDateTime());
     setEstimatedDurationMinutes(120);
+    setSelectedPrimaryUserId("");
+    setSelectedSupportUserIds([]);
     setPlanningNote("");
   }
 
@@ -418,7 +398,9 @@ export function WorkOrders() {
 
   function closeReportPanel() {
     setSelectedReportWorkOrder(null);
+    setSelectedDetailsWorkOrder(null);
     setWorkOrderReport(null);
+    setWorkOrderDetailsReport(null);
   }
 
   async function refreshExecutionTasks() {
@@ -434,7 +416,12 @@ export function WorkOrders() {
     if (!selectedWorkOrder || !user) return;
 
     if (!canPlanSelectedOrder) {
-      setErrorMessage("Apenas OS aguardando planejamento podem ser planejadas.");
+      setErrorMessage("Apenas OS aguardando planejamento ou planejadas podem ser editadas no planejamento.");
+      return;
+    }
+
+    if (!selectedPrimaryUserId) {
+      setErrorMessage("Selecione o responsável principal da OS.");
       return;
     }
 
@@ -443,14 +430,18 @@ export function WorkOrders() {
       return;
     }
 
+    const supportUserIds = selectedSupportUserIds.filter(
+      (supportUserId) => supportUserId !== selectedPrimaryUserId
+    );
+
     setPlanning(true);
     clearMessages();
 
     try {
       await planWorkOrder({
         workOrderId: selectedWorkOrder.id,
-        primaryUserId: user.id,
-        supportUserIds: [],
+        primaryUserId: selectedPrimaryUserId,
+        supportUserIds,
         scheduledStartAt: toIsoFromLocalInput(scheduledStartAt),
         scheduledEndAt: toIsoFromLocalInput(scheduledEndAt),
         estimatedDurationMinutes,
@@ -501,6 +492,73 @@ export function WorkOrders() {
       setErrorMessage(message);
     } finally {
       setAddingTask(false);
+    }
+  }
+
+  async function handleApplyStandardTasks() {
+    if (!selectedTaskWorkOrder) return;
+
+    setApplyingStandardTasks(true);
+    clearMessages();
+
+    try {
+      const insertedTasks = await applyStandardWorkOrderTasks({
+        workOrderId: selectedTaskWorkOrder.id,
+      });
+
+      if (insertedTasks === 0) {
+        setSuccessMessage(
+          "Nenhuma nova subtarefa foi aplicada. A OS já possui este checklist ou não há template ativo."
+        );
+      } else {
+        setSuccessMessage(
+          `${insertedTasks} subtarefa${insertedTasks > 1 ? "s" : ""} padrão aplicada${
+            insertedTasks > 1 ? "s" : ""
+          } com sucesso.`
+        );
+      }
+
+      closeTaskPanel();
+      await loadData();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao aplicar checklist padrão.";
+
+      setErrorMessage(message);
+    } finally {
+      setApplyingStandardTasks(false);
+    }
+  }
+
+
+  async function handleReopenRejectedWorkOrder(workOrder: WorkOrderListItem) {
+    clearMessages();
+
+    try {
+      await reopenRejectedWorkOrder({
+        workOrderId: workOrder.id,
+        reason: "Reabertura para replanejamento após reprovação.",
+      });
+
+      const reopenedWorkOrder: WorkOrderListItem = {
+        ...workOrder,
+        status: "planned",
+      };
+
+      await loadData();
+      openPlanningPanel(reopenedWorkOrder);
+      setSuccessMessage("OS reaberta para replanejamento.");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao reabrir OS para replanejamento.";
+
+      setErrorMessage(message);
+    } finally {
+      // A ação usa o feedback global de sucesso/erro da página.
     }
   }
 
@@ -708,1074 +766,165 @@ export function WorkOrders() {
 
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <div>
-          <span className={styles.eyebrow}>Execução operacional</span>
-          <h1>Ordens de Serviço</h1>
-          <p>
-            Liste, filtre, planeje, crie subtarefas, libere, execute, valide e
-            consulte relatórios das ordens de serviço do workspace{" "}
-            <strong>{currentWorkspace?.workspace_name}</strong>.
-          </p>
-        </div>
+      <WorkOrdersHeader
+        workspaceName={currentWorkspace?.workspace_name}
+        onRefresh={loadData}
+      />
 
-        <button type="button" className={styles.secondaryButton} onClick={loadData}>
-          <RefreshCw size={16} />
-          Atualizar
-        </button>
-      </header>
+      <WorkOrdersFeedback
+        errorMessage={errorMessage}
+        successMessage={successMessage}
+      />
 
-      {errorMessage && (
-        <div className={styles.errorBox}>
-          <AlertTriangle size={18} />
-          <span>{errorMessage}</span>
-        </div>
+      <WorkOrderDetailsDrawer
+        workOrder={selectedDetailsWorkOrder}
+        report={workOrderDetailsReport}
+        loading={loadingDetails}
+        onClose={closeDetailsDrawer}
+      />
+
+      <WorkOrderPlanningPanel
+        workOrder={selectedWorkOrder}
+        members={operationalMembers}
+        loadingMembers={loadingOperationalMembers}
+        selectedPrimaryUserId={selectedPrimaryUserId}
+        selectedSupportUserIds={selectedSupportUserIds}
+        scheduledStartAt={scheduledStartAt}
+        scheduledEndAt={scheduledEndAt}
+        estimatedDurationMinutes={estimatedDurationMinutes}
+        planningNote={planningNote}
+        planning={planning}
+        onSelectedPrimaryUserIdChange={setSelectedPrimaryUserId}
+        onSelectedSupportUserIdsChange={setSelectedSupportUserIds}
+        onScheduledStartAtChange={setScheduledStartAt}
+        onScheduledEndAtChange={setScheduledEndAt}
+        onEstimatedDurationMinutesChange={setEstimatedDurationMinutes}
+        onPlanningNoteChange={setPlanningNote}
+        onClose={closePlanningPanel}
+        onSubmit={handlePlanWorkOrder}
+      />
+
+      <WorkOrderTaskPanel
+        workOrder={selectedTaskWorkOrder}
+        taskTitle={taskTitle}
+        taskDescription={taskDescription}
+        taskResponseType={taskResponseType}
+        taskIsRequired={taskIsRequired}
+        taskRequiresPhoto={taskRequiresPhoto}
+        addingTask={addingTask}
+        applyingStandardTasks={applyingStandardTasks}
+        onTaskTitleChange={setTaskTitle}
+        onTaskDescriptionChange={setTaskDescription}
+        onTaskResponseTypeChange={setTaskResponseType}
+        onTaskIsRequiredChange={setTaskIsRequired}
+        onTaskRequiresPhotoChange={setTaskRequiresPhoto}
+        onClose={closeTaskPanel}
+        onApplyStandardTasks={handleApplyStandardTasks}
+        onSubmit={handleAddTask}
+      />
+
+      <WorkOrderReleasePanel
+        workOrder={selectedReleaseWorkOrder}
+        releaseReason={releaseReason}
+        releasing={releasing}
+        onReleaseReasonChange={setReleaseReason}
+        onClose={closeReleasePanel}
+        onSubmit={handleReleaseWorkOrder}
+      />
+
+      <WorkOrderExecutionPanel
+        workOrder={selectedExecutionWorkOrder}
+        executionTasks={executionTasks}
+        startReason={startReason}
+        finishParticipationReason={finishParticipationReason}
+        executionDescription={executionDescription}
+        identifiedCause={identifiedCause}
+        solutionApplied={solutionApplied}
+        finalResult={finalResult}
+        materialsUsed={materialsUsed}
+        internalNotes={internalNotes}
+        sendToValidation={sendToValidation}
+        startingExecution={startingExecution}
+        completingTaskId={completingTaskId}
+        finishingParticipation={finishingParticipation}
+        finishingOrder={finishingOrder}
+        onStartReasonChange={setStartReason}
+        onFinishParticipationReasonChange={setFinishParticipationReason}
+        onExecutionDescriptionChange={setExecutionDescription}
+        onIdentifiedCauseChange={setIdentifiedCause}
+        onSolutionAppliedChange={setSolutionApplied}
+        onFinalResultChange={setFinalResult}
+        onMaterialsUsedChange={setMaterialsUsed}
+        onInternalNotesChange={setInternalNotes}
+        onSendToValidationChange={setSendToValidation}
+        onClose={closeExecutionPanel}
+        onStartExecution={handleStartExecution}
+        onCompleteTask={handleCompleteTask}
+        onFinishParticipation={handleFinishParticipation}
+        onFinishWorkOrder={handleFinishWorkOrder}
+      />
+
+      <WorkOrderValidationPanel
+        workOrder={selectedValidationWorkOrder}
+        validationResult={validationResult}
+        validationComment={validationComment}
+        rejectionReason={rejectionReason}
+        validating={validating}
+        onValidationResultChange={setValidationResult}
+        onValidationCommentChange={setValidationComment}
+        onRejectionReasonChange={setRejectionReason}
+        onClose={closeValidationPanel}
+        onSubmit={handleValidateWorkOrder}
+      />
+
+      <WorkOrderReportPanel
+        workOrder={selectedReportWorkOrder}
+        report={workOrderReport}
+        loading={loadingReport}
+        onClose={closeReportPanel}
+      />
+
+      <WorkOrdersFilters
+        search={search}
+        statusFilter={statusFilter}
+        onSearchChange={setSearch}
+        onStatusFilterChange={setStatusFilter}
+        onSubmit={handleSearchSubmit}
+      />
+
+      <WorkOrdersViewToggle
+        viewMode={viewMode}
+        totalItems={workOrders.length}
+        onViewModeChange={setViewMode}
+      />
+
+      {viewMode === "kanban" ? (
+        <WorkOrdersKanbanBoard
+          loading={loading}
+          workOrders={workOrders}
+            onPlan={openPlanningPanel}
+          onAddTask={openTaskPanel}
+          onRelease={openReleasePanel}
+          onReopenRejected={handleReopenRejectedWorkOrder}
+          onExecute={openExecutionPanel}
+          onValidate={openValidationPanel}
+          onOpenReport={openReportPanel}
+          onOpenDetails={openDetailsDrawer}
+        />
+      ) : (
+        <WorkOrdersTable
+          loading={loading}
+          workOrders={workOrders}
+          onPlan={openPlanningPanel}
+          onAddTask={openTaskPanel}
+          onRelease={openReleasePanel}
+          onReopenRejected={handleReopenRejectedWorkOrder}
+          onExecute={openExecutionPanel}
+          onValidate={openValidationPanel}
+          onOpenReport={openReportPanel}
+          onOpenDetails={openDetailsDrawer}
+        />
       )}
-
-      {successMessage && (
-        <div className={styles.successBox}>
-          <CheckCircle2 size={18} />
-          <span>{successMessage}</span>
-        </div>
-      )}
-
-      {selectedWorkOrder && (
-        <section className={styles.formCard}>
-          <div className={styles.formHeader}>
-            <div>
-              <span>Planejamento</span>
-              <h2>Planejar OS {selectedWorkOrder.work_order_code}</h2>
-              <p>
-                {selectedWorkOrder.asset_code} - {selectedWorkOrder.asset_name}
-              </p>
-            </div>
-          </div>
-
-          <form onSubmit={handlePlanWorkOrder} className={styles.form}>
-            <label>
-              Responsável principal
-              <input value={user?.email ?? "Usuário logado"} disabled />
-            </label>
-
-            <label>
-              Início programado
-              <input
-                type="datetime-local"
-                value={scheduledStartAt}
-                onChange={(event) => setScheduledStartAt(event.target.value)}
-                required
-              />
-            </label>
-
-            <label>
-              Fim programado
-              <input
-                type="datetime-local"
-                value={scheduledEndAt}
-                onChange={(event) => setScheduledEndAt(event.target.value)}
-                required
-              />
-            </label>
-
-            <label>
-              Duração estimada em minutos
-              <input
-                type="number"
-                min={1}
-                value={estimatedDurationMinutes}
-                onChange={(event) =>
-                  setEstimatedDurationMinutes(Number(event.target.value))
-                }
-                required
-              />
-            </label>
-
-            <label className={styles.fullField}>
-              Observação do planejamento
-              <textarea
-                value={planningNote}
-                onChange={(event) => setPlanningNote(event.target.value)}
-                rows={3}
-                placeholder="Ex: Programado para inspeção no início do turno."
-              />
-            </label>
-
-            <div className={styles.formActions}>
-              <button
-                type="button"
-                className={styles.cancelButton}
-                onClick={closePlanningPanel}
-              >
-                Cancelar
-              </button>
-
-              <button type="submit" className={styles.primaryButton} disabled={planning}>
-                <CalendarClock size={16} />
-                {planning ? "Planejando..." : "Salvar planejamento"}
-              </button>
-            </div>
-          </form>
-        </section>
-      )}
-
-      {selectedTaskWorkOrder && (
-        <section className={styles.formCard}>
-          <div className={styles.formHeader}>
-            <div>
-              <span>Checklist</span>
-              <h2>Adicionar subtarefa</h2>
-              <p>
-                OS {selectedTaskWorkOrder.work_order_code} ·{" "}
-                {selectedTaskWorkOrder.asset_code} -{" "}
-                {selectedTaskWorkOrder.asset_name}
-              </p>
-            </div>
-          </div>
-
-          <form onSubmit={handleAddTask} className={styles.form}>
-            <label className={styles.fullField}>
-              Título da subtarefa
-              <input
-                value={taskTitle}
-                onChange={(event) => setTaskTitle(event.target.value)}
-                placeholder="Ex: Testar funcionamento após reparo"
-                required
-              />
-            </label>
-
-            <label>
-              Tipo de resposta
-              <select
-                value={taskResponseType}
-                onChange={(event) =>
-                  setTaskResponseType(event.target.value as TaskResponseType)
-                }
-              >
-                <option value="checkbox">Checkbox</option>
-                <option value="text">Texto</option>
-                <option value="number">Número</option>
-                <option value="boolean">Sim/Não</option>
-                <option value="compliance">Conformidade</option>
-                <option value="photo">Foto</option>
-              </select>
-            </label>
-
-            <label>
-              Obrigatória?
-              <select
-                value={taskIsRequired ? "yes" : "no"}
-                onChange={(event) => setTaskIsRequired(event.target.value === "yes")}
-              >
-                <option value="yes">Sim</option>
-                <option value="no">Não</option>
-              </select>
-            </label>
-
-            <label>
-              Exige foto?
-              <select
-                value={taskRequiresPhoto ? "yes" : "no"}
-                onChange={(event) =>
-                  setTaskRequiresPhoto(event.target.value === "yes")
-                }
-              >
-                <option value="no">Não</option>
-                <option value="yes">Sim</option>
-              </select>
-            </label>
-
-            <label className={styles.fullField}>
-              Descrição
-              <textarea
-                value={taskDescription}
-                onChange={(event) => setTaskDescription(event.target.value)}
-                rows={3}
-                placeholder="Detalhe como a subtarefa deve ser verificada."
-              />
-            </label>
-
-            <div className={styles.formActions}>
-              <button
-                type="button"
-                className={styles.cancelButton}
-                onClick={closeTaskPanel}
-              >
-                Cancelar
-              </button>
-
-              <button type="submit" className={styles.primaryButton} disabled={addingTask}>
-                <ListChecks size={16} />
-                {addingTask ? "Adicionando..." : "Adicionar subtarefa"}
-              </button>
-            </div>
-          </form>
-        </section>
-      )}
-
-      {selectedReleaseWorkOrder && (
-        <section className={styles.formCard}>
-          <div className={styles.formHeader}>
-            <div>
-              <span>Liberação</span>
-              <h2>Liberar OS {selectedReleaseWorkOrder.work_order_code}</h2>
-              <p>
-                Após liberar, a ordem ficará disponível para início da execução
-                técnica.
-              </p>
-            </div>
-          </div>
-
-          <form onSubmit={handleReleaseWorkOrder} className={styles.form}>
-            <label className={styles.fullField}>
-              Observação da liberação
-              <textarea
-                value={releaseReason}
-                onChange={(event) => setReleaseReason(event.target.value)}
-                rows={3}
-                placeholder="Ex: OS liberada conforme programação aprovada."
-              />
-            </label>
-
-            <div className={styles.formActions}>
-              <button
-                type="button"
-                className={styles.cancelButton}
-                onClick={closeReleasePanel}
-              >
-                Cancelar
-              </button>
-
-              <button type="submit" className={styles.primaryButton} disabled={releasing}>
-                <Send size={16} />
-                {releasing ? "Liberando..." : "Liberar para execução"}
-              </button>
-            </div>
-          </form>
-        </section>
-      )}
-
-      {selectedExecutionWorkOrder && (
-        <section className={styles.formCard}>
-          <div className={styles.formHeader}>
-            <div>
-              <span>Execução técnica</span>
-              <h2>Executar OS {selectedExecutionWorkOrder.work_order_code}</h2>
-              <p>
-                {selectedExecutionWorkOrder.asset_code} -{" "}
-                {selectedExecutionWorkOrder.asset_name}
-              </p>
-            </div>
-          </div>
-
-          {selectedExecutionWorkOrder.status === "released" && (
-            <div className={styles.executionBlock}>
-              <h3>Iniciar execução</h3>
-
-              <label>
-                Observação de início
-                <textarea
-                  value={startReason}
-                  onChange={(event) => setStartReason(event.target.value)}
-                  rows={3}
-                  placeholder="Ex: Técnico chegou ao local e iniciou verificação."
-                />
-              </label>
-
-              <div className={styles.formActions}>
-                <button
-                  type="button"
-                  className={styles.cancelButton}
-                  onClick={closeExecutionPanel}
-                >
-                  Fechar
-                </button>
-
-                <button
-                  type="button"
-                  className={styles.primaryButton}
-                  onClick={handleStartExecution}
-                  disabled={startingExecution}
-                >
-                  <PlayCircle size={16} />
-                  {startingExecution ? "Iniciando..." : "Iniciar execução"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {(selectedExecutionWorkOrder.status === "in_execution" ||
-            selectedExecutionWorkOrder.status === "paused") && (
-              <>
-                <div className={styles.executionBlock}>
-                  <h3>Checklist da OS</h3>
-
-                  {executionTasks.length === 0 ? (
-                    <p className={styles.mutedText}>
-                      Nenhuma subtarefa cadastrada para esta OS.
-                    </p>
-                  ) : (
-                    <div className={styles.taskList}>
-                      {executionTasks.map((task) => (
-                        <article key={task.id} className={styles.taskItem}>
-                          <div>
-                            <strong>{task.title}</strong>
-                            <span>
-                              {responseTypeLabels[task.response_type]} ·{" "}
-                              {task.is_required ? "Obrigatória" : "Opcional"} ·{" "}
-                              {task.status === "completed"
-                                ? "Concluída"
-                                : task.status === "not_applicable"
-                                  ? "Não aplicável"
-                                  : "Pendente"}
-                            </span>
-                            {task.description && <p>{task.description}</p>}
-                          </div>
-
-                          {task.status === "pending" && (
-                            <button
-                              type="button"
-                              className={styles.actionButton}
-                              onClick={() => handleCompleteTask(task)}
-                              disabled={completingTaskId === task.id}
-                            >
-                              <CheckCircle2 size={16} />
-                              {completingTaskId === task.id
-                                ? "Concluindo..."
-                                : "Concluir"}
-                            </button>
-                          )}
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className={styles.executionBlock}>
-                  <h3>Finalizar participação</h3>
-
-                  <label>
-                    Observação da participação
-                    <textarea
-                      value={finishParticipationReason}
-                      onChange={(event) =>
-                        setFinishParticipationReason(event.target.value)
-                      }
-                      rows={3}
-                      placeholder="Ex: Técnico finalizou sua atividade na OS."
-                    />
-                  </label>
-
-                  <button
-                    type="button"
-                    className={styles.secondaryButton}
-                    onClick={handleFinishParticipation}
-                    disabled={finishingParticipation}
-                  >
-                    {finishingParticipation
-                      ? "Finalizando..."
-                      : "Finalizar minha participação"}
-                  </button>
-                </div>
-
-                <form onSubmit={handleFinishWorkOrder} className={styles.form}>
-                  <label className={styles.fullField}>
-                    Descrição do serviço executado
-                    <textarea
-                      value={executionDescription}
-                      onChange={(event) =>
-                        setExecutionDescription(event.target.value)
-                      }
-                      rows={4}
-                      placeholder="Descreva exatamente o que foi feito."
-                      required
-                    />
-                  </label>
-
-                  <label className={styles.fullField}>
-                    Causa identificada
-                    <textarea
-                      value={identifiedCause}
-                      onChange={(event) => setIdentifiedCause(event.target.value)}
-                      rows={3}
-                      placeholder="Ex: Vedação danificada na conexão."
-                      required
-                    />
-                  </label>
-
-                  <label className={styles.fullField}>
-                    Solução aplicada
-                    <textarea
-                      value={solutionApplied}
-                      onChange={(event) => setSolutionApplied(event.target.value)}
-                      rows={3}
-                      placeholder="Ex: Substituição da vedação e teste de estanqueidade."
-                      required
-                    />
-                  </label>
-
-                  <label>
-                    Resultado final
-                    <select
-                      value={finalResult}
-                      onChange={(event) =>
-                        setFinalResult(event.target.value as FinalResult)
-                      }
-                    >
-                      {Object.entries(finalResultLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label>
-                    Enviar para validação?
-                    <select
-                      value={sendToValidation ? "yes" : "no"}
-                      onChange={(event) =>
-                        setSendToValidation(event.target.value === "yes")
-                      }
-                    >
-                      <option value="yes">Sim</option>
-                      <option value="no">Não</option>
-                    </select>
-                  </label>
-
-                  <label className={styles.fullField}>
-                    Materiais utilizados
-                    <textarea
-                      value={materialsUsed}
-                      onChange={(event) => setMaterialsUsed(event.target.value)}
-                      rows={3}
-                      placeholder="Ex: Veda rosca, conexão, parafusos..."
-                    />
-                  </label>
-
-                  <label className={styles.fullField}>
-                    Observações internas
-                    <textarea
-                      value={internalNotes}
-                      onChange={(event) => setInternalNotes(event.target.value)}
-                      rows={3}
-                      placeholder="Observações internas para a equipe."
-                    />
-                  </label>
-
-                  <div className={styles.formActions}>
-                    <button
-                      type="button"
-                      className={styles.cancelButton}
-                      onClick={closeExecutionPanel}
-                    >
-                      Cancelar
-                    </button>
-
-                    <button
-                      type="submit"
-                      className={styles.primaryButton}
-                      disabled={finishingOrder}
-                    >
-                      <CheckCircle2 size={16} />
-                      {finishingOrder ? "Finalizando..." : "Finalizar OS"}
-                    </button>
-                  </div>
-                </form>
-              </>
-            )}
-        </section>
-      )}
-
-      {selectedValidationWorkOrder && (
-        <section className={styles.formCard}>
-          <div className={styles.formHeader}>
-            <div>
-              <span>Validação</span>
-              <h2>Validar OS {selectedValidationWorkOrder.work_order_code}</h2>
-              <p>
-                {selectedValidationWorkOrder.asset_code} -{" "}
-                {selectedValidationWorkOrder.asset_name}
-              </p>
-            </div>
-          </div>
-
-          <form onSubmit={handleValidateWorkOrder} className={styles.form}>
-            <label>
-              Resultado da validação
-              <select
-                value={validationResult}
-                onChange={(event) =>
-                  setValidationResult(
-                    event.target.value as WorkOrderValidationResult
-                  )
-                }
-              >
-                <option value="approved">Aprovar</option>
-                <option value="rejected">Reprovar</option>
-              </select>
-            </label>
-
-            {validationResult === "rejected" && (
-              <label className={styles.fullField}>
-                Motivo da reprovação
-                <textarea
-                  value={rejectionReason}
-                  onChange={(event) => setRejectionReason(event.target.value)}
-                  rows={3}
-                  placeholder="Explique o motivo da reprovação."
-                  required
-                />
-              </label>
-            )}
-
-            <label className={styles.fullField}>
-              Comentário
-              <textarea
-                value={validationComment}
-                onChange={(event) => setValidationComment(event.target.value)}
-                rows={3}
-                placeholder="Comentário opcional sobre a validação."
-              />
-            </label>
-
-            <div className={styles.formActions}>
-              <button
-                type="button"
-                className={styles.cancelButton}
-                onClick={closeValidationPanel}
-              >
-                Cancelar
-              </button>
-
-              <button
-                type="submit"
-                className={styles.primaryButton}
-                disabled={validating}
-              >
-                <CheckCircle2 size={16} />
-                {validating
-                  ? "Validando..."
-                  : validationResult === "approved"
-                    ? "Aprovar OS"
-                    : "Reprovar OS"}
-              </button>
-            </div>
-          </form>
-        </section>
-      )}
-
-      {selectedReportWorkOrder && (
-        <section className={styles.reportCard}>
-          <div className={styles.reportHeader}>
-            <div>
-              <span>Relatório da OS</span>
-              <h2>{selectedReportWorkOrder.work_order_code}</h2>
-              <p>{selectedReportWorkOrder.title}</p>
-            </div>
-
-            <button
-              type="button"
-              className={styles.cancelButton}
-              onClick={closeReportPanel}
-            >
-              Fechar relatório
-            </button>
-          </div>
-
-          {loadingReport ? (
-            <div className={styles.emptyState}>Carregando relatório...</div>
-          ) : workOrderReport ? (
-            <div className={styles.reportGrid}>
-              <section className={styles.reportSection}>
-                <h3>Dados principais</h3>
-
-                <div className={styles.reportInfoGrid}>
-                  <span>Status</span>
-                  <strong>{statusLabels[workOrderReport.status]}</strong>
-
-                  <span>Tipo</span>
-                  <strong>
-                    {maintenanceTypeLabels[workOrderReport.maintenance_type]}
-                  </strong>
-
-                  <span>Prioridade</span>
-                  <strong>{priorityLabels[workOrderReport.priority]}</strong>
-
-                  <span>Origem</span>
-                  <strong>{workOrderReport.origin}</strong>
-
-                  <span>Prazo calculado</span>
-                  <strong>{formatDateTime(workOrderReport.calculated_due_at)}</strong>
-
-                  <span>Início programado</span>
-                  <strong>{formatDateTime(workOrderReport.scheduled_start_at)}</strong>
-
-                  <span>Fim programado</span>
-                  <strong>{formatDateTime(workOrderReport.scheduled_end_at)}</strong>
-
-                  <span>Início real</span>
-                  <strong>{formatDateTime(workOrderReport.actual_started_at)}</strong>
-
-                  <span>Fim real</span>
-                  <strong>{formatDateTime(workOrderReport.actual_finished_at)}</strong>
-
-                  <span>HH total</span>
-                  <strong>
-                    {formatMinutes(workOrderReport.total_labor_minutes)}
-                  </strong>
-
-                  <span>Duração calendário</span>
-                  <strong>
-                    {formatMinutes(workOrderReport.calendar_duration_minutes)}
-                  </strong>
-                </div>
-              </section>
-
-              <section className={styles.reportSection}>
-                <h3>Ativo/local</h3>
-
-                <div className={styles.reportInfoGrid}>
-                  <span>Código</span>
-                  <strong>{workOrderReport.asset.code}</strong>
-
-                  <span>Nome</span>
-                  <strong>{workOrderReport.asset.name}</strong>
-
-                  <span>Tipo</span>
-                  <strong>{workOrderReport.asset.type_name}</strong>
-
-                  <span>Natureza</span>
-                  <strong>{workOrderReport.asset.kind}</strong>
-
-                  <span>Criticidade</span>
-                  <strong>{workOrderReport.asset.criticality}</strong>
-                </div>
-              </section>
-
-              {workOrderReport.service_request && (
-                <section className={styles.reportSection}>
-                  <h3>Chamado de origem</h3>
-
-                  <div className={styles.reportInfoGrid}>
-                    <span>Código</span>
-                    <strong>{workOrderReport.service_request.code}</strong>
-
-                    <span>Solicitante</span>
-                    <strong>
-                      {workOrderReport.service_request.opened_by_name ||
-                        "Usuário"}
-                    </strong>
-
-                    <span>Problema</span>
-                    <strong>
-                      {workOrderReport.service_request.problem ||
-                        workOrderReport.service_request.problem_other_text ||
-                        "Não informado"}
-                    </strong>
-
-                    <span>Abertura</span>
-                    <strong>
-                      {formatDateTime(workOrderReport.service_request.created_at)}
-                    </strong>
-                  </div>
-
-                  <p className={styles.reportText}>
-                    {workOrderReport.service_request.description}
-                  </p>
-                </section>
-              )}
-
-              {workOrderReport.preventive && (
-                <section className={styles.reportSection}>
-                  <h3>Preventiva</h3>
-
-                  <div className={styles.reportInfoGrid}>
-                    <span>Plano</span>
-                    <strong>{workOrderReport.preventive.plan_name}</strong>
-
-                    <span>Tarefa</span>
-                    <strong>{workOrderReport.preventive.task_name}</strong>
-
-                    <span>Vencimento</span>
-                    <strong>{workOrderReport.preventive.due_date}</strong>
-                  </div>
-                </section>
-              )}
-
-              <section className={styles.reportSection}>
-                <h3>Execução</h3>
-
-                <div className={styles.reportTextGroup}>
-                  <div>
-                    <span>Descrição do serviço</span>
-                    <p>
-                      {workOrderReport.execution_description ||
-                        "Não informado."}
-                    </p>
-                  </div>
-
-                  <div>
-                    <span>Causa identificada</span>
-                    <p>{workOrderReport.identified_cause || "Não informado."}</p>
-                  </div>
-
-                  <div>
-                    <span>Solução aplicada</span>
-                    <p>{workOrderReport.solution_applied || "Não informado."}</p>
-                  </div>
-
-                  <div>
-                    <span>Resultado</span>
-                    <p>
-                      {workOrderReport.result
-                        ? finalResultLabels[workOrderReport.result]
-                        : "Não informado."}
-                    </p>
-                  </div>
-
-                  <div>
-                    <span>Materiais utilizados</span>
-                    <p>{workOrderReport.materials_used || "Não informado."}</p>
-                  </div>
-
-                  <div>
-                    <span>Observações internas</span>
-                    <p>{workOrderReport.internal_notes || "Não informado."}</p>
-                  </div>
-                </div>
-              </section>
-
-              <section className={styles.reportSection}>
-                <h3>Equipe</h3>
-
-                {workOrderReport.assignments &&
-                  workOrderReport.assignments.length > 0 ? (
-                  <div className={styles.reportList}>
-                    {workOrderReport.assignments.map((assignment) => (
-                      <article key={assignment.assignment_id}>
-                        <strong>{assignment.user_name || "Usuário"}</strong>
-                        <span>
-                          {assignment.is_primary
-                            ? "Responsável principal"
-                            : "Apoio"}{" "}
-                          · {assignment.status} ·{" "}
-                          {formatMinutes(assignment.total_minutes)}
-                        </span>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={styles.mutedText}>Nenhuma equipe vinculada.</p>
-                )}
-              </section>
-
-              <section className={styles.reportSection}>
-                <h3>Checklist/Subtarefas</h3>
-
-                {workOrderReport.tasks && workOrderReport.tasks.length > 0 ? (
-                  <div className={styles.reportList}>
-                    {workOrderReport.tasks.map((task) => (
-                      <article key={task.id}>
-                        <strong>{task.title}</strong>
-                        <span>
-                          {responseTypeLabels[task.response_type]} ·{" "}
-                          {task.is_required ? "Obrigatória" : "Opcional"} ·{" "}
-                          {task.status === "completed"
-                            ? "Concluída"
-                            : task.status === "not_applicable"
-                              ? "Não aplicável"
-                              : "Pendente"}
-                        </span>
-                        {task.description && <p>{task.description}</p>}
-                        {task.completed_at && (
-                          <small>
-                            Concluída por{" "}
-                            {task.completed_by_name || "Usuário"} em{" "}
-                            {formatDateTime(task.completed_at)}
-                          </small>
-                        )}
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={styles.mutedText}>Nenhuma subtarefa cadastrada.</p>
-                )}
-              </section>
-
-              <section className={styles.reportSection}>
-                <h3>Anexos/Evidências</h3>
-
-                {workOrderReport.attachments &&
-                  workOrderReport.attachments.length > 0 ? (
-                  <div className={styles.reportList}>
-                    {workOrderReport.attachments.map((attachment) => (
-                      <article key={attachment.id}>
-                        <strong>{attachment.file_name}</strong>
-                        <span>
-                          {attachment.attachment_type} ·{" "}
-                          {formatDateTime(attachment.created_at)}
-                        </span>
-                        {attachment.description && (
-                          <p>{attachment.description}</p>
-                        )}
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={styles.mutedText}>Nenhum anexo cadastrado.</p>
-                )}
-              </section>
-
-              <section className={styles.reportSection}>
-                <h3>Validações</h3>
-
-                {workOrderReport.validations &&
-                  workOrderReport.validations.length > 0 ? (
-                  <div className={styles.reportList}>
-                    {workOrderReport.validations.map((validation) => (
-                      <article key={validation.id}>
-                        <strong>
-                          {validationResultLabels[validation.validation_result]}
-                        </strong>
-                        <span>
-                          {validation.validation_type} ·{" "}
-                          {validation.validated_by_name || "Usuário"} ·{" "}
-                          {formatDateTime(validation.created_at)}
-                        </span>
-                        {validation.rejection_reason && (
-                          <p>Motivo: {validation.rejection_reason}</p>
-                        )}
-                        {validation.comment && <p>{validation.comment}</p>}
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={styles.mutedText}>Nenhuma validação registrada.</p>
-                )}
-              </section>
-
-              <section className={styles.reportSectionFull}>
-                <h3>Histórico</h3>
-
-                {workOrderReport.history && workOrderReport.history.length > 0 ? (
-                  <div className={styles.reportList}>
-                    {workOrderReport.history.map((history) => (
-                      <article key={history.id}>
-                        <strong>{history.action}</strong>
-                        <span>
-                          {history.performed_by_name || "Sistema"} ·{" "}
-                          {formatDateTime(history.created_at)}
-                        </span>
-                        {history.reason && <p>{history.reason}</p>}
-                        {(history.old_value || history.new_value) && (
-                          <small>
-                            De: {stringifyValue(history.old_value)} | Para:{" "}
-                            {stringifyValue(history.new_value)}
-                          </small>
-                        )}
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={styles.mutedText}>Nenhum histórico registrado.</p>
-                )}
-              </section>
-            </div>
-          ) : (
-            <div className={styles.emptyState}>Relatório não encontrado.</div>
-          )}
-        </section>
-      )}
-
-      <section className={styles.filters}>
-        <form onSubmit={handleSearchSubmit} className={styles.searchBox}>
-          <Search size={18} />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar por OS, título, descrição, ativo ou chamado..."
-          />
-          <button type="submit">Buscar</button>
-        </form>
-
-        <div className={styles.filterGroup}>
-          <Filter size={16} />
-
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-          >
-            <option value="all">Todos os status</option>
-            <option value="waiting_planning">Aguardando planejamento</option>
-            <option value="planned">Planejadas</option>
-            <option value="released">Liberadas</option>
-            <option value="in_execution">Em execução</option>
-            <option value="paused">Pausadas</option>
-            <option value="waiting_validation">Aguardando validação</option>
-            <option value="rejected_by_client">Rejeitadas pelo cliente</option>
-            <option value="closed">Fechadas</option>
-            <option value="cancelled">Canceladas</option>
-          </select>
-        </div>
-      </section>
-
-      <section className={styles.list}>
-        {loading ? (
-          <div className={styles.emptyState}>Carregando ordens...</div>
-        ) : workOrders.length === 0 ? (
-          <div className={styles.emptyState}>
-            Nenhuma ordem encontrada para os filtros atuais.
-          </div>
-        ) : (
-          workOrders.map((order) => (
-            <article key={order.id} className={styles.orderCard}>
-              <div className={styles.orderIcon}>
-                <Wrench size={20} />
-              </div>
-
-              <div className={styles.orderMain}>
-                <div className={styles.orderTop}>
-                  <div>
-                    <strong>{order.title}</strong>
-                    <span>
-                      {order.work_order_code} · Criada em{" "}
-                      {formatDateTime(order.created_at)}
-                    </span>
-                  </div>
-
-                  <div className={styles.badges}>
-                    <span className={`${styles.statusBadge} ${styles[order.status]}`}>
-                      {statusLabels[order.status]}
-                    </span>
-                    <span className={`${styles.priorityBadge} ${styles[order.priority]}`}>
-                      {priorityLabels[order.priority]}
-                    </span>
-                  </div>
-                </div>
-
-                <p>{order.description}</p>
-
-                <div className={styles.meta}>
-                  <span>
-                    Ativo: {order.asset_code} - {order.asset_name}
-                  </span>
-                  <span>Tipo: {maintenanceTypeLabels[order.maintenance_type]}</span>
-                  <span>Origem: {order.origin}</span>
-                  <span>Prazo: {formatDateTime(order.calculated_due_at)}</span>
-                  <span>
-                    Programado: {formatDateTime(order.scheduled_start_at)}
-                  </span>
-                  <span>
-                    Responsável: {order.primary_user_name || "Não definido"}
-                  </span>
-                  <span>Subtarefas: {order.tasks_count}</span>
-                  <span>Horas: {Math.round(order.total_labor_minutes / 60)}h</span>
-                </div>
-
-                <div className={styles.cardActions}>
-                  {order.status === "waiting_planning" && (
-                    <button
-                      type="button"
-                      className={styles.actionButton}
-                      onClick={() => openPlanningPanel(order)}
-                    >
-                      <CalendarClock size={16} />
-                      Planejar
-                    </button>
-                  )}
-
-                  {(order.status === "waiting_planning" ||
-                    order.status === "planned") && (
-                      <button
-                        type="button"
-                        className={styles.actionButton}
-                        onClick={() => openTaskPanel(order)}
-                      >
-                        <ListChecks size={16} />
-                        Subtarefa
-                      </button>
-                    )}
-
-                  {order.status === "planned" && (
-                    <button
-                      type="button"
-                      className={styles.actionButton}
-                      onClick={() => openReleasePanel(order)}
-                    >
-                      <Send size={16} />
-                      Liberar
-                    </button>
-                  )}
-
-                  {order.status === "released" && (
-                    <button
-                      type="button"
-                      className={styles.actionButton}
-                      onClick={() => openExecutionPanel(order)}
-                    >
-                      <PlayCircle size={16} />
-                      Iniciar execução
-                    </button>
-                  )}
-
-                  {order.status === "in_execution" && (
-                    <button
-                      type="button"
-                      className={styles.actionButton}
-                      onClick={() => openExecutionPanel(order)}
-                    >
-                      <PlayCircle size={16} />
-                      Continuar execução
-                    </button>
-                  )}
-
-                  {order.status === "paused" && (
-                    <button
-                      type="button"
-                      className={styles.actionButton}
-                      onClick={() => openExecutionPanel(order)}
-                    >
-                      <PlayCircle size={16} />
-                      Retomar execução
-                    </button>
-                  )}
-
-                  {order.status === "waiting_validation" && (
-                    <button
-                      type="button"
-                      className={styles.actionButton}
-                      onClick={() => openValidationPanel(order)}
-                    >
-                      <CheckCircle2 size={16} />
-                      Validar OS
-                    </button>
-                  )}
-
-                  {(order.status === "waiting_validation" ||
-                    order.status === "closed" ||
-                    order.status === "rejected_by_client") && (
-                      <button
-                        type="button"
-                        className={styles.actionButton}
-                        onClick={() => openReportPanel(order)}
-                      >
-                        <FileText size={16} />
-                        Relatório
-                      </button>
-                    )}
-
-                  {order.primary_user_id && (
-                    <span className={styles.infoPill}>
-                      <UserRound size={15} />
-                      Responsável definido
-                    </span>
-                  )}
-                </div>
-              </div>
-            </article>
-          ))
-        )}
-      </section>
     </div>
   );
 }

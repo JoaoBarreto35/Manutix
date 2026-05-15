@@ -1,0 +1,240 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.72rem;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 1rem;
+  background: var(--color-surface, #ffffff);
+  padding: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.card:hover,
+.card:focus-visible {
+  border-color: var(--color-primary, #2563eb);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.1);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.identity {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.34rem;
+}
+
+.code {
+  color: var(--color-muted, #64748b);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.title {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--color-text, #0f172a);
+  font-size: 0.98rem;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.priorityDot {
+  width: 0.78rem;
+  height: 0.78rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.16);
+  margin-top: 0.18rem;
+}
+
+.priorityLow {
+  background: #22c55e;
+}
+
+.priorityMedium {
+  background: #eab308;
+}
+
+.priorityHigh {
+  background: #f97316;
+}
+
+.priorityCritical {
+  background: #ef4444;
+}
+
+.context {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.context span,
+.metaLine span,
+.schedule,
+.statusLine {
+  min-width: 0;
+}
+
+.context span {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow: hidden;
+  color: var(--color-muted, #64748b);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.context svg,
+.metaLine svg,
+.schedule svg {
+  flex: 0 0 auto;
+}
+
+.schedule {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.8rem;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.78rem;
+}
+
+.scheduleDate,
+.estimatedTime {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  min-width: 0;
+}
+
+.scheduleDate {
+  overflow: hidden;
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.estimatedTime {
+  color: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+.scheduleOk {
+  background: rgba(34, 197, 94, 0.1);
+  color: #15803d;
+}
+
+.scheduleWarning {
+  background: rgba(234, 179, 8, 0.14);
+  color: #92400e;
+}
+
+.scheduleDanger {
+  background: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+}
+
+.scheduleMuted {
+  background: var(--color-soft, #f1f5f9);
+  color: var(--color-muted, #64748b);
+}
+
+.progressBlock {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.progressTrack {
+  overflow: hidden;
+  width: 100%;
+  height: 0.34rem;
+  border-radius: 999px;
+  background: var(--color-soft, #f1f5f9);
+}
+
+.progressValue {
+  color: var(--color-muted, #64748b);
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.progressBar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary, #2563eb);
+  transition: width 0.2s ease;
+}
+
+.metaLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.metaLine span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 999px;
+  background: var(--color-background, #f8fafc);
+  color: var(--color-muted, #64748b);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.38rem 0.48rem;
+}
+
+.statusLine {
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  padding-top: 0.62rem;
+}
+
+.statusLine span {
+  color: var(--color-text, #0f172a);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+@media (max-width: 720px) {
+  .schedule {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

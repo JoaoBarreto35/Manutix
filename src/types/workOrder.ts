@@ -113,6 +113,9 @@ export type WorkOrderListItem = {
   total_labor_minutes: number;
   tasks_count: number;
   pending_required_tasks_count: number;
+  required_tasks_count: number;
+  completed_required_tasks_count: number;
+  required_tasks_progress_percent: number | null;
   attachments_count: number;
 
   schedule_health:
@@ -148,9 +151,18 @@ export type AddWorkOrderTaskInput = {
   sortOrder: number;
 };
 
+export type ApplyStandardWorkOrderTasksInput = {
+  workOrderId: string;
+};
+
 export type ReleaseWorkOrderInput = {
   workOrderId: string;
   reason: string | null;
+};
+
+export type ReopenRejectedWorkOrderInput = {
+  workOrderId: string;
+  reason: string;
 };
 
 export type WorkOrderTask = {
