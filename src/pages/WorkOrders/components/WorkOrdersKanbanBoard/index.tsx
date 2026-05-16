@@ -1,19 +1,14 @@
 import type { WorkOrderListItem } from "../../../../types/workOrder";
 import { workOrderKanbanGroups } from "../../constants/workOrderLabels";
 import { WorkOrderCard } from "../WorkOrderCard";
+import type { WorkOrderQuickAction } from "../../utils/workOrderQuickActions";
 import styles from "./styles.module.css";
 
 type WorkOrdersKanbanBoardProps = {
   loading: boolean;
   workOrders: WorkOrderListItem[];
-  onPlan: (workOrder: WorkOrderListItem) => void;
-  onAddTask: (workOrder: WorkOrderListItem) => void;
-  onRelease: (workOrder: WorkOrderListItem) => void;
-  onReopenRejected: (workOrder: WorkOrderListItem) => void;
-  onExecute: (workOrder: WorkOrderListItem) => void;
-  onValidate: (workOrder: WorkOrderListItem) => void;
-  onOpenReport: (workOrder: WorkOrderListItem) => void;
   onOpenDetails: (workOrder: WorkOrderListItem) => void;
+  onOpenAction: (workOrder: WorkOrderListItem, action: WorkOrderQuickAction) => void;
 };
 
 function getOrdersByGroup(
@@ -26,14 +21,8 @@ function getOrdersByGroup(
 export function WorkOrdersKanbanBoard({
   loading,
   workOrders,
-  onPlan,
-  onAddTask,
-  onRelease,
-  onReopenRejected,
-  onExecute,
-  onValidate,
-  onOpenReport,
   onOpenDetails,
+  onOpenAction,
 }: WorkOrdersKanbanBoardProps) {
   if (loading) {
     return <div className={styles.emptyState}>Carregando ordens...</div>;
@@ -70,14 +59,8 @@ export function WorkOrdersKanbanBoard({
                   <WorkOrderCard
                     key={order.id}
                     order={order}
-                    onPlan={onPlan}
-                    onAddTask={onAddTask}
-                    onRelease={onRelease}
-                    onReopenRejected={onReopenRejected}
-                    onExecute={onExecute}
-                    onValidate={onValidate}
-                    onOpenReport={onOpenReport}
                     onOpenDetails={onOpenDetails}
+                    onOpenAction={onOpenAction}
                   />
                 ))
               )}

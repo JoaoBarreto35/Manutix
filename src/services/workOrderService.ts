@@ -1,10 +1,13 @@
 import { supabase } from "../lib/supabase";
 import type {
   AddWorkOrderTaskInput,
+  UpdateWorkOrderTaskInput,
+  DeleteWorkOrderTaskInput,
   ApplyStandardWorkOrderTasksInput,
   CompleteWorkOrderTaskInput,
   FinishWorkOrderInput,
   FinishWorkOrderParticipationInput,
+  MarkWorkOrderTaskNotApplicableInput,
   PlanWorkOrderInput,
   ReleaseWorkOrderInput,
   ReopenRejectedWorkOrderInput,
@@ -65,6 +68,15 @@ export async function getWorkOrders(
     throw new Error(requiredTaskProgressError.message);
   }
 
+  const { data: executionState, error: executionStateError } =
+    await supabase.rpc("get_work_order_execution_state", {
+      target_workspace_id: filters.workspaceId,
+    });
+
+  if (executionStateError) {
+    throw new Error(executionStateError.message);
+  }
+
   const requiredTaskProgressByWorkOrder = new Map<
     string,
     {
@@ -86,11 +98,31 @@ export async function getWorkOrders(
     });
   }
 
+  const executionStateByWorkOrder = new Map<
+    string,
+    {
+      openTimeLogsCount: number;
+      currentUserHasOpenTimeLog: boolean;
+    }
+  >();
+
+  for (const state of executionState ?? []) {
+    executionStateByWorkOrder.set(String(state.work_order_id), {
+      openTimeLogsCount: Number(state.open_time_logs_count ?? 0),
+      currentUserHasOpenTimeLog: Boolean(state.current_user_has_open_time_log),
+    });
+  }
+
   return workOrders.map((workOrder) => {
     const progress = requiredTaskProgressByWorkOrder.get(workOrder.id) ?? {
       requiredTasksCount: 0,
       completedRequiredTasksCount: 0,
       requiredTasksProgressPercent: 0,
+    };
+
+    const state = executionStateByWorkOrder.get(workOrder.id) ?? {
+      openTimeLogsCount: 0,
+      currentUserHasOpenTimeLog: false,
     };
 
     return {
@@ -101,6 +133,8 @@ export async function getWorkOrders(
         0,
         Math.min(100, progress.requiredTasksProgressPercent)
       ),
+      open_time_logs_count: state.openTimeLogsCount,
+      current_user_has_open_time_log: state.currentUserHasOpenTimeLog,
     };
   });
 }
@@ -195,6 +229,38 @@ export async function addWorkOrderTask(
   return data as string;
 }
 
+export async function updateWorkOrderTask(
+  input: UpdateWorkOrderTaskInput
+): Promise<void> {
+  const { error } = await supabase.rpc("update_work_order_task", {
+    target_task_id: input.taskId,
+    target_title: input.title,
+    target_description: input.description,
+    target_response_type: input.responseType,
+    target_is_required: input.isRequired,
+    target_requires_photo: input.requiresPhoto,
+    target_sort_order: input.sortOrder,
+    target_reason: input.reason,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function deleteWorkOrderTask(
+  input: DeleteWorkOrderTaskInput
+): Promise<void> {
+  const { error } = await supabase.rpc("delete_work_order_task", {
+    target_task_id: input.taskId,
+    target_reason: input.reason,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 export async function applyStandardWorkOrderTasks(
   input: ApplyStandardWorkOrderTasksInput
 ): Promise<number> {
@@ -270,6 +336,19 @@ export async function completeWorkOrderTask(
     target_answer_number: input.answerNumber,
     target_answer_boolean: input.answerBoolean,
     target_compliance_result: input.complianceResult,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function markWorkOrderTaskNotApplicable(
+  input: MarkWorkOrderTaskNotApplicableInput
+): Promise<void> {
+  const { error } = await supabase.rpc("mark_work_order_task_not_applicable", {
+    target_task_id: input.taskId,
+    target_reason: input.reason,
   });
 
   if (error) {

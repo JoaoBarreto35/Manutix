@@ -1,12 +1,3 @@
-import {
-  CalendarClock,
-  CheckCircle2,
-  FileText,
-  ListChecks,
-  PlayCircle,
-  Send,
-} from "lucide-react";
-
 import { Button } from "../../../../components/Button";
 import type { WorkOrderListItem } from "../../../../types/workOrder";
 import {
@@ -15,32 +6,21 @@ import {
   statusLabels,
 } from "../../constants/workOrderLabels";
 import { formatDateTime } from "../../utils/workOrderFormatters";
+import { getWorkOrderPrimaryAction, type WorkOrderQuickAction } from "../../utils/workOrderQuickActions";
 import styles from "./styles.module.css";
 
 type WorkOrdersTableProps = {
   loading: boolean;
   workOrders: WorkOrderListItem[];
-  onPlan: (workOrder: WorkOrderListItem) => void;
-  onAddTask: (workOrder: WorkOrderListItem) => void;
-  onRelease: (workOrder: WorkOrderListItem) => void;
-  onReopenRejected: (workOrder: WorkOrderListItem) => void;
-  onExecute: (workOrder: WorkOrderListItem) => void;
-  onValidate: (workOrder: WorkOrderListItem) => void;
-  onOpenReport: (workOrder: WorkOrderListItem) => void;
   onOpenDetails: (workOrder: WorkOrderListItem) => void;
+  onOpenAction: (workOrder: WorkOrderListItem, action: WorkOrderQuickAction) => void;
 };
 
 export function WorkOrdersTable({
   loading,
   workOrders,
-  onPlan,
-  onAddTask,
-  onRelease,
-  onReopenRejected,
-  onExecute,
-  onValidate,
-  onOpenReport,
   onOpenDetails,
+  onOpenAction,
 }: WorkOrdersTableProps) {
   if (loading) {
     return <div className={styles.emptyState}>Carregando ordens...</div>;
@@ -68,7 +48,7 @@ export function WorkOrdersTable({
               <th>Responsável</th>
               <th>Programado</th>
               <th>Prazo</th>
-              <th>Subtarefas</th>
+              <th>Checklist</th>
               <th>Horas</th>
               <th>Ações</th>
             </tr>
@@ -76,7 +56,11 @@ export function WorkOrdersTable({
 
           <tbody>
             {workOrders.map((order) => (
-              <tr key={order.id} className={styles.clickableRow} onClick={() => onOpenDetails(order)}>
+              <tr
+                key={order.id}
+                className={styles.clickableRow}
+                onClick={() => onOpenDetails(order)}
+              >
                 <td>
                   <div className={styles.orderCell}>
                     <strong>{order.work_order_code}</strong>
@@ -108,75 +92,30 @@ export function WorkOrdersTable({
                 <td>{order.primary_user_name || "Não definido"}</td>
                 <td>{formatDateTime(order.scheduled_start_at)}</td>
                 <td>{formatDateTime(order.calculated_due_at)}</td>
-                <td>{order.tasks_count}</td>
+                <td>{Math.round(Number(order.required_tasks_progress_percent ?? 0))}%</td>
                 <td>{Math.round(order.total_labor_minutes / 60)}h</td>
 
                 <td>
                   <div className={styles.actions} onClick={(event) => event.stopPropagation()}>
-                    {order.status === "waiting_planning" && (
-                      <Button type="button" variant="secondary" size="sm" onClick={() => onPlan(order)}>
-                        <CalendarClock size={16} />
-                        Planejar
-                      </Button>
-                    )}
+                    {(() => {
+                      const primaryAction = getWorkOrderPrimaryAction(order);
 
-                    {order.status === "rejected_by_client" && (
-                      <Button type="button" variant="warning" size="sm" onClick={() => onReopenRejected(order)}>
-                        <CalendarClock size={16} />
-                        Replanejar
-                      </Button>
-                    )}
+                      if (!primaryAction) {
+                        return <span className={styles.emptyAction}>-</span>;
+                      }
 
-                    {(order.status === "waiting_planning" || order.status === "planned") && (
-                      <Button type="button" variant="secondary" size="sm" onClick={() => onAddTask(order)}>
-                        <ListChecks size={16} />
-                        Subtarefa
-                      </Button>
-                    )}
-
-                    {order.status === "planned" && (
-                      <Button type="button" variant="primary" size="sm" onClick={() => onRelease(order)}>
-                        <Send size={16} />
-                        Liberar
-                      </Button>
-                    )}
-
-                    {order.status === "released" && (
-                      <Button type="button" variant="primary" size="sm" onClick={() => onExecute(order)}>
-                        <PlayCircle size={16} />
-                        Iniciar
-                      </Button>
-                    )}
-
-                    {order.status === "in_execution" && (
-                      <Button type="button" variant="primary" size="sm" onClick={() => onExecute(order)}>
-                        <PlayCircle size={16} />
-                        Continuar
-                      </Button>
-                    )}
-
-                    {order.status === "paused" && (
-                      <Button type="button" variant="primary" size="sm" onClick={() => onExecute(order)}>
-                        <PlayCircle size={16} />
-                        Retomar
-                      </Button>
-                    )}
-
-                    {order.status === "waiting_validation" && (
-                      <Button type="button" variant="success" size="sm" onClick={() => onValidate(order)}>
-                        <CheckCircle2 size={16} />
-                        Validar
-                      </Button>
-                    )}
-
-                    {(order.status === "waiting_validation" ||
-                      order.status === "closed" ||
-                      order.status === "rejected_by_client") && (
-                      <Button type="button" variant="secondary" size="sm" onClick={() => onOpenReport(order)}>
-                        <FileText size={16} />
-                        Relatório
-                      </Button>
-                    )}
+                      return (
+                        <Button
+                          type="button"
+                          variant={primaryAction.action === "details" ? "secondary" : "primary"}
+                          size="sm"
+                          title={primaryAction.title}
+                          onClick={() => onOpenAction(order, primaryAction.action)}
+                        >
+                          {primaryAction.label}
+                        </Button>
+                      );
+                    })()}
                   </div>
                 </td>
               </tr>

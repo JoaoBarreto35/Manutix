@@ -1,156 +1,110 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useAuth } from "../../contexts/AuthContext";
+import { useEffect, useState, type FormEvent } from "react";
 import { useWorkspace } from "../../contexts/WorkspaceContext";
-import { getWorkspaceOperationalMembers, type WorkspaceOperationalMember } from "../../services/workspaceMemberService";
+import {
+  getWorkspaceOperationalMembers,
+  type WorkspaceOperationalMember,
+} from "../../services/workspaceMemberService";
 import {
   addWorkOrderTask,
   applyStandardWorkOrderTasks,
   completeWorkOrderTask,
+  deleteWorkOrderTask,
   finishWorkOrder,
   finishWorkOrderParticipation,
   getWorkOrderReport,
-  getWorkOrderTasks,
   getWorkOrders,
+  markWorkOrderTaskNotApplicable,
   planWorkOrder,
   releaseWorkOrder,
   reopenRejectedWorkOrder,
   startWorkOrderParticipation,
   updateWorkOrderDetails,
+  updateWorkOrderTask,
   validateWorkOrder,
 } from "../../services/workOrderService";
 import type {
-  FinalResult,
-  TaskResponseType,
-  UpdateWorkOrderDetailsInput,
+  AddWorkOrderTaskInput,
+  CompleteWorkOrderTaskInput,
+  DeleteWorkOrderTaskInput,
+  FinishWorkOrderInput,
+  FinishWorkOrderParticipationInput,
+  MarkWorkOrderTaskNotApplicableInput,
   PlanWorkOrderInput,
+  ReleaseWorkOrderInput,
+  ReopenRejectedWorkOrderInput,
+  StartWorkOrderParticipationInput,
+  UpdateWorkOrderDetailsInput,
+  UpdateWorkOrderTaskInput,
+  ValidateWorkOrderInput,
   WorkOrderListItem,
   WorkOrderReport,
-  WorkOrderTask,
-  WorkOrderValidationResult,
 } from "../../types/workOrder";
 import styles from "./styles.module.css";
 
 import { WorkOrdersFeedback } from "./components/WorkOrdersFeedback";
 import { WorkOrdersFilters } from "./components/WorkOrdersFilters";
 import { WorkOrdersHeader } from "./components/WorkOrdersHeader";
-import { WorkOrderPlanningPanel } from "./components/WorkOrderPlanningPanel";
-import { WorkOrderReleasePanel } from "./components/WorkOrderReleasePanel";
-import { WorkOrderTaskPanel } from "./components/WorkOrderTaskPanel";
-import { WorkOrderValidationPanel } from "./components/WorkOrderValidationPanel";
-import { WorkOrderExecutionPanel } from "./components/WorkOrderExecutionPanel";
-import { WorkOrderReportPanel } from "./components/WorkOrderReportPanel";
+import { WorkOrderActionDrawer } from "./components/WorkOrderActionDrawer";
 import { WorkOrderDetailsDrawer } from "./components/WorkOrderDetailsDrawer";
 import { WorkOrdersKanbanBoard } from "./components/WorkOrdersKanbanBoard";
 import { WorkOrdersTable } from "./components/WorkOrdersTable";
-import { WorkOrdersViewToggle, type WorkOrdersViewMode } from "./components/WorkOrdersViewToggle";
-import { type StatusFilter } from "./constants/workOrderLabels";
 import {
-  getDefaultEndDateTime,
-  getDefaultStartDateTime,
-  toIsoFromLocalInput,
-} from "./utils/workOrderFormatters";
+  WorkOrdersViewToggle,
+  type WorkOrdersViewMode,
+} from "./components/WorkOrdersViewToggle";
+import { type StatusFilter } from "./constants/workOrderLabels";
+import type { WorkOrderQuickAction } from "./utils/workOrderQuickActions";
 
 export function WorkOrders() {
-  const { user } = useAuth();
   const { currentWorkspace } = useWorkspace();
 
   const [workOrders, setWorkOrders] = useState<WorkOrderListItem[]>([]);
-  const [operationalMembers, setOperationalMembers] = useState<WorkspaceOperationalMember[]>([]);
-
+  const [operationalMembers, setOperationalMembers] = useState<
+    WorkspaceOperationalMember[]
+  >([]);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [viewMode, setViewMode] = useState<WorkOrdersViewMode>("kanban");
 
-  const [selectedWorkOrder, setSelectedWorkOrder] =
-    useState<WorkOrderListItem | null>(null);
-
-  const [selectedTaskWorkOrder, setSelectedTaskWorkOrder] =
-    useState<WorkOrderListItem | null>(null);
-
-  const [selectedReleaseWorkOrder, setSelectedReleaseWorkOrder] =
-    useState<WorkOrderListItem | null>(null);
-
-  const [selectedExecutionWorkOrder, setSelectedExecutionWorkOrder] =
-    useState<WorkOrderListItem | null>(null);
-
-  const [selectedValidationWorkOrder, setSelectedValidationWorkOrder] =
-    useState<WorkOrderListItem | null>(null);
-
-  const [selectedReportWorkOrder, setSelectedReportWorkOrder] =
-    useState<WorkOrderListItem | null>(null);
-
   const [selectedDetailsWorkOrder, setSelectedDetailsWorkOrder] =
     useState<WorkOrderListItem | null>(null);
-
-  const [workOrderReport, setWorkOrderReport] =
-    useState<WorkOrderReport | null>(null);
-
+  const [selectedActionWorkOrder, setSelectedActionWorkOrder] =
+    useState<WorkOrderListItem | null>(null);
+  const [activeQuickAction, setActiveQuickAction] =
+    useState<WorkOrderQuickAction | null>(null);
   const [workOrderDetailsReport, setWorkOrderDetailsReport] =
     useState<WorkOrderReport | null>(null);
 
-  const [executionTasks, setExecutionTasks] = useState<WorkOrderTask[]>([]);
-
-  const [scheduledStartAt, setScheduledStartAt] = useState(
-    getDefaultStartDateTime()
-  );
-  const [scheduledEndAt, setScheduledEndAt] = useState(getDefaultEndDateTime());
-  const [estimatedDurationMinutes, setEstimatedDurationMinutes] = useState(120);
-  const [selectedPrimaryUserId, setSelectedPrimaryUserId] = useState("");
-  const [selectedSupportUserIds, setSelectedSupportUserIds] = useState<string[]>([]);
-  const [planningNote, setPlanningNote] = useState("");
-
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskDescription, setTaskDescription] = useState("");
-  const [taskResponseType, setTaskResponseType] =
-    useState<TaskResponseType>("checkbox");
-  const [taskIsRequired, setTaskIsRequired] = useState(true);
-  const [taskRequiresPhoto, setTaskRequiresPhoto] = useState(false);
-
-  const [releaseReason, setReleaseReason] = useState("");
-
-  const [startReason, setStartReason] = useState("");
-  const [finishParticipationReason, setFinishParticipationReason] =
-    useState("");
-
-  const [executionDescription, setExecutionDescription] = useState("");
-  const [identifiedCause, setIdentifiedCause] = useState("");
-  const [solutionApplied, setSolutionApplied] = useState("");
-  const [finalResult, setFinalResult] = useState<FinalResult>("resolved");
-  const [materialsUsed, setMaterialsUsed] = useState("");
-  const [internalNotes, setInternalNotes] = useState("");
-  const [sendToValidation, setSendToValidation] = useState(true);
-
-  const [validationResult, setValidationResult] =
-    useState<WorkOrderValidationResult>("approved");
-  const [validationComment, setValidationComment] = useState("");
-  const [rejectionReason, setRejectionReason] = useState("");
-
   const [loading, setLoading] = useState(true);
-  const [loadingOperationalMembers, setLoadingOperationalMembers] = useState(false);
-  const [planning, setPlanning] = useState(false);
+  const [loadingOperationalMembers, setLoadingOperationalMembers] =
+    useState(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
   const [savingDetails, setSavingDetails] = useState(false);
   const [savingDrawerPlanning, setSavingDrawerPlanning] = useState(false);
   const [addingTask, setAddingTask] = useState(false);
   const [applyingStandardTasks, setApplyingStandardTasks] = useState(false);
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
+  const [markingTaskNotApplicableId, setMarkingTaskNotApplicableId] =
+    useState<string | null>(null);
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+
   const [releasing, setReleasing] = useState(false);
   const [startingExecution, setStartingExecution] = useState(false);
   const [finishingParticipation, setFinishingParticipation] = useState(false);
-  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [finishingOrder, setFinishingOrder] = useState(false);
   const [validating, setValidating] = useState(false);
-  const [loadingReport, setLoadingReport] = useState(false);
-  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [reopeningRejected, setReopeningRejected] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const canPlanSelectedOrder = useMemo(() => {
-    return (
-      selectedWorkOrder?.status === "waiting_planning" ||
-      selectedWorkOrder?.status === "planned"
-    );
-  }, [selectedWorkOrder]);
+  function clearMessages() {
+    setErrorMessage("");
+    setSuccessMessage("");
+  }
 
   async function loadData() {
     if (!currentWorkspace) return;
@@ -212,27 +166,8 @@ export function WorkOrders() {
     await loadData();
   }
 
-  function clearMessages() {
-    setErrorMessage("");
-    setSuccessMessage("");
-  }
-
-  function closeAllPanels() {
-    setSelectedWorkOrder(null);
-    setSelectedTaskWorkOrder(null);
-    setSelectedReleaseWorkOrder(null);
-    setSelectedExecutionWorkOrder(null);
-    setSelectedValidationWorkOrder(null);
-    setSelectedReportWorkOrder(null);
-    setSelectedDetailsWorkOrder(null);
-    setWorkOrderReport(null);
-    setWorkOrderDetailsReport(null);
-  }
-
   async function openDetailsDrawer(workOrder: WorkOrderListItem) {
-    closeAllPanels();
     clearMessages();
-
     setSelectedDetailsWorkOrder(workOrder);
     setWorkOrderDetailsReport(null);
     setLoadingDetails(true);
@@ -255,10 +190,46 @@ export function WorkOrders() {
     setWorkOrderDetailsReport(null);
   }
 
+  function openQuickActionDrawer(
+    workOrder: WorkOrderListItem,
+    action: WorkOrderQuickAction
+  ) {
+    if (action === "details") {
+      openDetailsDrawer(workOrder);
+      return;
+    }
+
+    clearMessages();
+    setSelectedActionWorkOrder(workOrder);
+    setActiveQuickAction(action);
+  }
+
+  function closeQuickActionDrawer() {
+    setSelectedActionWorkOrder(null);
+    setActiveQuickAction(null);
+  }
+
+  function openDetailsFromQuickAction(workOrder: WorkOrderListItem) {
+    closeQuickActionDrawer();
+    openDetailsDrawer(workOrder);
+  }
+
+  async function refreshActionWorkOrder(workOrderId: string) {
+    const latestOrder = workOrders.find((workOrder) => workOrder.id === workOrderId);
+
+    if (latestOrder) {
+      setSelectedActionWorkOrder(latestOrder);
+    }
+  }
 
   async function refreshDetailsDrawer(workOrderId: string) {
     const report = await getWorkOrderReport(workOrderId);
     setWorkOrderDetailsReport(report);
+  }
+
+  async function refreshSelectedOrder(workOrderId: string) {
+    await refreshDetailsDrawer(workOrderId);
+    await loadData();
   }
 
   async function handleUpdateWorkOrderDetailsFromDrawer(
@@ -282,8 +253,7 @@ export function WorkOrders() {
         };
       });
 
-      await refreshDetailsDrawer(input.workOrderId);
-      await loadData();
+      await refreshSelectedOrder(input.workOrderId);
       setSuccessMessage("Dados principais da OS atualizados com sucesso.");
     } catch (error) {
       const message =
@@ -300,13 +270,15 @@ export function WorkOrders() {
 
   async function handleUpdatePlanningFromDrawer(input: PlanWorkOrderInput) {
     if (new Date(input.scheduledEndAt) <= new Date(input.scheduledStartAt)) {
-      setErrorMessage("A data final precisa ser maior que a data inicial.");
-      throw new Error("A data final precisa ser maior que a data inicial.");
+      const message = "A data final precisa ser maior que a data inicial.";
+      setErrorMessage(message);
+      throw new Error(message);
     }
 
     if (!input.primaryUserId) {
-      setErrorMessage("Selecione o responsável principal da OS.");
-      throw new Error("Selecione o responsável principal da OS.");
+      const message = "Selecione o responsável principal da OS.";
+      setErrorMessage(message);
+      throw new Error(message);
     }
 
     setSavingDrawerPlanning(true);
@@ -319,7 +291,9 @@ export function WorkOrders() {
         (member) => member.userId === input.primaryUserId
       );
       const primaryName =
-        primaryMember?.fullName?.trim() || primaryMember?.email || "Responsável definido";
+        primaryMember?.fullName?.trim() ||
+        primaryMember?.email ||
+        "Responsável definido";
 
       setSelectedDetailsWorkOrder((current) => {
         if (!current || current.id !== input.workOrderId) return current;
@@ -336,12 +310,14 @@ export function WorkOrders() {
         };
       });
 
-      await refreshDetailsDrawer(input.workOrderId);
-      await loadData();
+      await refreshSelectedOrder(input.workOrderId);
+      await refreshActionWorkOrder(input.workOrderId);
       setSuccessMessage("Planejamento da OS atualizado com sucesso.");
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Erro ao atualizar planejamento da OS.";
+        error instanceof Error
+          ? error.message
+          : "Erro ao atualizar planejamento da OS.";
 
       setErrorMessage(message);
       throw error;
@@ -350,275 +326,81 @@ export function WorkOrders() {
     }
   }
 
-  function openPlanningPanel(workOrder: WorkOrderListItem) {
-    closeAllPanels();
-
-    setSelectedWorkOrder(workOrder);
-    setScheduledStartAt(getDefaultStartDateTime());
-    setScheduledEndAt(getDefaultEndDateTime());
-    setEstimatedDurationMinutes(workOrder.estimated_duration_minutes ?? 120);
-    setSelectedPrimaryUserId(workOrder.primary_user_id ?? user?.id ?? "");
-    setSelectedSupportUserIds([]);
-    setPlanningNote("");
-
-    clearMessages();
-  }
-
-  function closePlanningPanel() {
-    setSelectedWorkOrder(null);
-    setScheduledStartAt(getDefaultStartDateTime());
-    setScheduledEndAt(getDefaultEndDateTime());
-    setEstimatedDurationMinutes(120);
-    setSelectedPrimaryUserId("");
-    setSelectedSupportUserIds([]);
-    setPlanningNote("");
-  }
-
-  function openTaskPanel(workOrder: WorkOrderListItem) {
-    closeAllPanels();
-
-    setSelectedTaskWorkOrder(workOrder);
-    setTaskTitle("");
-    setTaskDescription("");
-    setTaskResponseType("checkbox");
-    setTaskIsRequired(true);
-    setTaskRequiresPhoto(false);
-
-    clearMessages();
-  }
-
-  function closeTaskPanel() {
-    setSelectedTaskWorkOrder(null);
-    setTaskTitle("");
-    setTaskDescription("");
-    setTaskResponseType("checkbox");
-    setTaskIsRequired(true);
-    setTaskRequiresPhoto(false);
-  }
-
-  function openReleasePanel(workOrder: WorkOrderListItem) {
-    closeAllPanels();
-
-    setSelectedReleaseWorkOrder(workOrder);
-    setReleaseReason("");
-
-    clearMessages();
-  }
-
-  function closeReleasePanel() {
-    setSelectedReleaseWorkOrder(null);
-    setReleaseReason("");
-  }
-
-  async function openExecutionPanel(workOrder: WorkOrderListItem) {
-    closeAllPanels();
-
-    setSelectedExecutionWorkOrder(workOrder);
-    setStartReason("");
-    setFinishParticipationReason("");
-    setExecutionDescription("");
-    setIdentifiedCause("");
-    setSolutionApplied("");
-    setFinalResult("resolved");
-    setMaterialsUsed("");
-    setInternalNotes("");
-    setSendToValidation(true);
-
-    clearMessages();
-
-    try {
-      const tasks = await getWorkOrderTasks(workOrder.id);
-      setExecutionTasks(tasks);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Erro ao carregar subtarefas.";
-
-      setErrorMessage(message);
-      setExecutionTasks([]);
-    }
-  }
-
-  function closeExecutionPanel() {
-    setSelectedExecutionWorkOrder(null);
-    setExecutionTasks([]);
-    setStartReason("");
-    setFinishParticipationReason("");
-    setExecutionDescription("");
-    setIdentifiedCause("");
-    setSolutionApplied("");
-    setFinalResult("resolved");
-    setMaterialsUsed("");
-    setInternalNotes("");
-    setSendToValidation(true);
-  }
-
-  function openValidationPanel(workOrder: WorkOrderListItem) {
-    closeAllPanels();
-
-    setSelectedValidationWorkOrder(workOrder);
-    setValidationResult("approved");
-    setValidationComment("");
-    setRejectionReason("");
-
-    clearMessages();
-  }
-
-  function closeValidationPanel() {
-    setSelectedValidationWorkOrder(null);
-    setValidationResult("approved");
-    setValidationComment("");
-    setRejectionReason("");
-  }
-
-  async function openReportPanel(workOrder: WorkOrderListItem) {
-    closeAllPanels();
-
-    setSelectedReportWorkOrder(workOrder);
-    setWorkOrderReport(null);
-    setLoadingReport(true);
-
-    clearMessages();
-
-    try {
-      const report = await getWorkOrderReport(workOrder.id);
-      setWorkOrderReport(report);
-
-      if (!report) {
-        setErrorMessage("Relatório não encontrado para esta OS.");
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Erro ao carregar relatório.";
-
-      setErrorMessage(message);
-    } finally {
-      setLoadingReport(false);
-    }
-  }
-
-  function closeReportPanel() {
-    setSelectedReportWorkOrder(null);
-    setSelectedDetailsWorkOrder(null);
-    setWorkOrderReport(null);
-    setWorkOrderDetailsReport(null);
-  }
-
-  async function refreshExecutionTasks() {
-    if (!selectedExecutionWorkOrder) return;
-
-    const tasks = await getWorkOrderTasks(selectedExecutionWorkOrder.id);
-    setExecutionTasks(tasks);
-  }
-
-  async function handlePlanWorkOrder(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!selectedWorkOrder || !user) return;
-
-    if (!canPlanSelectedOrder) {
-      setErrorMessage("Apenas OS aguardando planejamento ou planejadas podem ser editadas no planejamento.");
-      return;
-    }
-
-    if (!selectedPrimaryUserId) {
-      setErrorMessage("Selecione o responsável principal da OS.");
-      return;
-    }
-
-    if (new Date(scheduledEndAt) <= new Date(scheduledStartAt)) {
-      setErrorMessage("A data final precisa ser maior que a data inicial.");
-      return;
-    }
-
-    const supportUserIds = selectedSupportUserIds.filter(
-      (supportUserId) => supportUserId !== selectedPrimaryUserId
-    );
-
-    setPlanning(true);
-    clearMessages();
-
-    try {
-      await planWorkOrder({
-        workOrderId: selectedWorkOrder.id,
-        primaryUserId: selectedPrimaryUserId,
-        supportUserIds,
-        scheduledStartAt: toIsoFromLocalInput(scheduledStartAt),
-        scheduledEndAt: toIsoFromLocalInput(scheduledEndAt),
-        estimatedDurationMinutes,
-        note: planningNote.trim() || null,
-      });
-
-      setSuccessMessage("OS planejada com sucesso.");
-      closePlanningPanel();
-
-      await loadData();
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Erro ao planejar OS.";
-
-      setErrorMessage(message);
-    } finally {
-      setPlanning(false);
-    }
-  }
-
-  async function handleAddTask(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!selectedTaskWorkOrder) return;
-
+  async function handleAddTaskFromDrawer(input: AddWorkOrderTaskInput) {
     setAddingTask(true);
     clearMessages();
 
     try {
-      await addWorkOrderTask({
-        workOrderId: selectedTaskWorkOrder.id,
-        title: taskTitle,
-        description: taskDescription.trim() || null,
-        responseType: taskResponseType,
-        isRequired: taskIsRequired,
-        requiresPhoto: taskRequiresPhoto,
-        sortOrder: selectedTaskWorkOrder.tasks_count + 1,
-      });
-
+      await addWorkOrderTask(input);
+      await refreshSelectedOrder(input.workOrderId);
       setSuccessMessage("Subtarefa adicionada com sucesso.");
-      closeTaskPanel();
-
-      await loadData();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Erro ao adicionar subtarefa.";
 
       setErrorMessage(message);
+      throw error;
     } finally {
       setAddingTask(false);
     }
   }
 
-  async function handleApplyStandardTasks() {
-    if (!selectedTaskWorkOrder) return;
+  async function handleUpdateTaskFromDrawer(input: UpdateWorkOrderTaskInput) {
+    if (!selectedDetailsWorkOrder) return;
 
+    setUpdatingTaskId(input.taskId);
+    clearMessages();
+
+    try {
+      await updateWorkOrderTask(input);
+      await refreshSelectedOrder(selectedDetailsWorkOrder.id);
+      setSuccessMessage("Subtarefa atualizada com sucesso.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao atualizar subtarefa.";
+
+      setErrorMessage(message);
+      throw error;
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  }
+
+  async function handleDeleteTaskFromDrawer(input: DeleteWorkOrderTaskInput) {
+    if (!selectedDetailsWorkOrder) return;
+
+    setDeletingTaskId(input.taskId);
+    clearMessages();
+
+    try {
+      await deleteWorkOrderTask(input);
+      await refreshSelectedOrder(selectedDetailsWorkOrder.id);
+      setSuccessMessage("Subtarefa excluída com sucesso.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao excluir subtarefa.";
+
+      setErrorMessage(message);
+      throw error;
+    } finally {
+      setDeletingTaskId(null);
+    }
+  }
+
+  async function handleApplyStandardTasksFromDrawer(workOrderId: string) {
     setApplyingStandardTasks(true);
     clearMessages();
 
     try {
-      const insertedTasks = await applyStandardWorkOrderTasks({
-        workOrderId: selectedTaskWorkOrder.id,
-      });
+      const insertedTasks = await applyStandardWorkOrderTasks({ workOrderId });
 
-      if (insertedTasks === 0) {
-        setSuccessMessage(
-          "Nenhuma nova subtarefa foi aplicada. A OS já possui este checklist ou não há template ativo."
-        );
-      } else {
-        setSuccessMessage(
-          `${insertedTasks} subtarefa${insertedTasks > 1 ? "s" : ""} padrão aplicada${insertedTasks > 1 ? "s" : ""
-          } com sucesso.`
-        );
-      }
+      await refreshSelectedOrder(workOrderId);
 
-      closeTaskPanel();
-      await loadData();
+      setSuccessMessage(
+        insertedTasks === 0
+          ? "Nenhuma nova subtarefa foi aplicada. A OS já possui este checklist ou não há template ativo."
+          : `${insertedTasks} subtarefa${insertedTasks > 1 ? "s" : ""} padrão aplicada${insertedTasks > 1 ? "s" : ""} com sucesso.`
+      );
     } catch (error) {
       const message =
         error instanceof Error
@@ -626,238 +408,227 @@ export function WorkOrders() {
           : "Erro ao aplicar checklist padrão.";
 
       setErrorMessage(message);
+      throw error;
     } finally {
       setApplyingStandardTasks(false);
     }
   }
 
+  async function handleCompleteTaskFromDrawer(input: CompleteWorkOrderTaskInput) {
+    if (!selectedDetailsWorkOrder) return;
 
-  async function handleReopenRejectedWorkOrder(workOrder: WorkOrderListItem) {
+    setCompletingTaskId(input.taskId);
     clearMessages();
 
     try {
-      await reopenRejectedWorkOrder({
-        workOrderId: workOrder.id,
-        reason: "Reabertura para replanejamento após reprovação.",
-      });
+      await completeWorkOrderTask(input);
+      await refreshSelectedOrder(selectedDetailsWorkOrder.id);
+      setSuccessMessage("Subtarefa concluída com sucesso.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao concluir subtarefa.";
 
-      const reopenedWorkOrder: WorkOrderListItem = {
-        ...workOrder,
-        status: "planned",
-      };
+      setErrorMessage(message);
+      throw error;
+    } finally {
+      setCompletingTaskId(null);
+    }
+  }
 
-      await loadData();
-      openPlanningPanel(reopenedWorkOrder);
+  async function handleMarkTaskNotApplicableFromDrawer(
+    input: MarkWorkOrderTaskNotApplicableInput
+  ) {
+    if (!selectedDetailsWorkOrder) return;
+
+    setMarkingTaskNotApplicableId(input.taskId);
+    clearMessages();
+
+    try {
+      await markWorkOrderTaskNotApplicable(input);
+      await refreshSelectedOrder(selectedDetailsWorkOrder.id);
+      setSuccessMessage("Subtarefa marcada como não aplicável.");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Erro ao marcar subtarefa como não aplicável.";
+
+      setErrorMessage(message);
+      throw error;
+    } finally {
+      setMarkingTaskNotApplicableId(null);
+    }
+  }
+
+  async function handleReleaseFromDrawer(input: ReleaseWorkOrderInput) {
+    setReleasing(true);
+    clearMessages();
+
+    try {
+      await releaseWorkOrder(input);
+      setSelectedDetailsWorkOrder((current) =>
+        current && current.id === input.workOrderId
+          ? { ...current, status: "released" }
+          : current
+      );
+      setSelectedActionWorkOrder((current) =>
+        current && current.id === input.workOrderId
+          ? { ...current, status: "released" }
+          : current
+      );
+      await refreshSelectedOrder(input.workOrderId);
+      setSuccessMessage("OS liberada para execução com sucesso.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro ao liberar OS.";
+      setErrorMessage(message);
+      throw error;
+    } finally {
+      setReleasing(false);
+    }
+  }
+
+  async function handleReopenRejectedFromDrawer(input: ReopenRejectedWorkOrderInput) {
+    setReopeningRejected(true);
+    clearMessages();
+
+    try {
+      await reopenRejectedWorkOrder(input);
+      setSelectedDetailsWorkOrder((current) =>
+        current && current.id === input.workOrderId
+          ? { ...current, status: "planned" }
+          : current
+      );
+      setSelectedActionWorkOrder((current) =>
+        current && current.id === input.workOrderId
+          ? { ...current, status: "planned" }
+          : current
+      );
+      await refreshSelectedOrder(input.workOrderId);
       setSuccessMessage("OS reaberta para replanejamento.");
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Erro ao reabrir OS para replanejamento.";
-
       setErrorMessage(message);
+      throw error;
     } finally {
-      // A ação usa o feedback global de sucesso/erro da página.
+      setReopeningRejected(false);
     }
   }
 
-  async function handleReleaseWorkOrder(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!selectedReleaseWorkOrder) return;
-
-    if (selectedReleaseWorkOrder.status !== "planned") {
-      setErrorMessage("Apenas OS planejadas podem ser liberadas.");
-      return;
-    }
-
-    setReleasing(true);
-    clearMessages();
-
-    try {
-      await releaseWorkOrder({
-        workOrderId: selectedReleaseWorkOrder.id,
-        reason: releaseReason.trim() || null,
-      });
-
-      setSuccessMessage("OS liberada para execução com sucesso.");
-      closeReleasePanel();
-
-      await loadData();
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Erro ao liberar OS.";
-
-      setErrorMessage(message);
-    } finally {
-      setReleasing(false);
-    }
-  }
-
-  async function handleStartExecution() {
-    if (!selectedExecutionWorkOrder) return;
-
+  async function handleStartExecutionFromDrawer(
+    input: StartWorkOrderParticipationInput
+  ) {
     setStartingExecution(true);
     clearMessages();
 
     try {
-      await startWorkOrderParticipation({
-        workOrderId: selectedExecutionWorkOrder.id,
-        reason: startReason.trim() || null,
-      });
-
+      await startWorkOrderParticipation(input);
+      setSelectedDetailsWorkOrder((current) =>
+        current && current.id === input.workOrderId
+          ? { ...current, status: "in_execution", open_time_logs_count: (current.open_time_logs_count ?? 0) + 1, current_user_has_open_time_log: true }
+          : current
+      );
+      setSelectedActionWorkOrder((current) =>
+        current && current.id === input.workOrderId
+          ? { ...current, status: "in_execution", open_time_logs_count: (current.open_time_logs_count ?? 0) + 1, current_user_has_open_time_log: true }
+          : current
+      );
+      await refreshSelectedOrder(input.workOrderId);
       setSuccessMessage("Execução iniciada com sucesso.");
-
-      const updatedOrder: WorkOrderListItem = {
-        ...selectedExecutionWorkOrder,
-        status: "in_execution",
-      };
-
-      setSelectedExecutionWorkOrder(updatedOrder);
-
-      await loadData();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Erro ao iniciar execução.";
-
       setErrorMessage(message);
+      throw error;
     } finally {
       setStartingExecution(false);
     }
   }
 
-  async function handleCompleteTask(task: WorkOrderTask) {
-    setCompletingTaskId(task.id);
-    clearMessages();
-
-    try {
-      await completeWorkOrderTask({
-        taskId: task.id,
-        answerText: "Concluído pelo painel de execução.",
-        answerNumber: null,
-        answerBoolean: true,
-        complianceResult: true,
-      });
-
-      setSuccessMessage("Subtarefa concluída com sucesso.");
-
-      await refreshExecutionTasks();
-      await loadData();
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Erro ao concluir subtarefa.";
-
-      setErrorMessage(message);
-    } finally {
-      setCompletingTaskId(null);
-    }
-  }
-
-  async function handleFinishParticipation() {
-    if (!selectedExecutionWorkOrder) return;
-
+  async function handleFinishParticipationFromDrawer(
+    input: FinishWorkOrderParticipationInput
+  ) {
     setFinishingParticipation(true);
     clearMessages();
 
     try {
-      await finishWorkOrderParticipation({
-        workOrderId: selectedExecutionWorkOrder.id,
-        reason: finishParticipationReason.trim() || null,
-      });
-
-      setSuccessMessage("Participação finalizada com sucesso.");
+      await finishWorkOrderParticipation(input);
+      setSelectedDetailsWorkOrder((current) =>
+        current && current.id === input.workOrderId
+          ? {
+              ...current,
+              open_time_logs_count: Math.max(0, (current.open_time_logs_count ?? 0) - 1),
+              current_user_has_open_time_log: false,
+            }
+          : current
+      );
+      setSelectedActionWorkOrder((current) =>
+        current && current.id === input.workOrderId
+          ? {
+              ...current,
+              open_time_logs_count: Math.max(0, (current.open_time_logs_count ?? 0) - 1),
+              current_user_has_open_time_log: false,
+            }
+          : current
+      );
+      await refreshSelectedOrder(input.workOrderId);
       await loadData();
+      setSuccessMessage("Participação finalizada com sucesso.");
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : "Erro ao finalizar participação.";
-
       setErrorMessage(message);
+      throw error;
     } finally {
       setFinishingParticipation(false);
     }
   }
 
-  async function handleFinishWorkOrder(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!selectedExecutionWorkOrder) return;
-
-    const hasPendingRequiredTasks = executionTasks.some(
-      (task) => task.is_required && task.status === "pending"
-    );
-
-    if (hasPendingRequiredTasks) {
-      setErrorMessage("Existem subtarefas obrigatórias pendentes.");
-      return;
-    }
-
+  async function handleFinishWorkOrderFromDrawer(input: FinishWorkOrderInput) {
     setFinishingOrder(true);
     clearMessages();
 
     try {
-      await finishWorkOrder({
-        workOrderId: selectedExecutionWorkOrder.id,
-        executionDescription,
-        identifiedCause,
-        solutionApplied,
-        result: finalResult,
-        materialsUsed: materialsUsed.trim() || null,
-        internalNotes: internalNotes.trim() || null,
-        sendToValidation,
-      });
-
-      setSuccessMessage("OS finalizada com sucesso.");
-      closeExecutionPanel();
-
+      await finishWorkOrder(input);
+      await refreshSelectedOrder(input.workOrderId);
       await loadData();
+      setSuccessMessage("OS finalizada com sucesso.");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Erro ao finalizar OS.";
-
+      const message = error instanceof Error ? error.message : "Erro ao finalizar OS.";
       setErrorMessage(message);
+      throw error;
     } finally {
       setFinishingOrder(false);
     }
   }
 
-  async function handleValidateWorkOrder(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!selectedValidationWorkOrder) return;
-
-    if (validationResult === "rejected" && !rejectionReason.trim()) {
-      setErrorMessage("Informe o motivo da reprovação.");
-      return;
+  async function handleValidateFromDrawer(input: ValidateWorkOrderInput) {
+    if (input.validationResult === "rejected" && !input.rejectionReason?.trim()) {
+      const message = "Informe o motivo da reprovação.";
+      setErrorMessage(message);
+      throw new Error(message);
     }
 
     setValidating(true);
     clearMessages();
 
     try {
-      await validateWorkOrder({
-        workOrderId: selectedValidationWorkOrder.id,
-        validationResult,
-        rejectionReason:
-          validationResult === "rejected" ? rejectionReason.trim() : null,
-        comment: validationComment.trim() || null,
-      });
-
+      await validateWorkOrder(input);
+      await refreshSelectedOrder(input.workOrderId);
+      await loadData();
       setSuccessMessage(
-        validationResult === "approved"
+        input.validationResult === "approved"
           ? "OS aprovada com sucesso."
           : "OS reprovada com sucesso."
       );
-
-      closeValidationPanel();
-
-      await loadData();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Erro ao validar OS.";
-
+      const message = error instanceof Error ? error.message : "Erro ao validar OS.";
       setErrorMessage(message);
+      throw error;
     } finally {
       setValidating(false);
     }
@@ -875,6 +646,29 @@ export function WorkOrders() {
         successMessage={successMessage}
       />
 
+      <WorkOrderActionDrawer
+        workOrder={selectedActionWorkOrder}
+        action={activeQuickAction}
+        members={operationalMembers}
+        loadingMembers={loadingOperationalMembers}
+        savingPlanning={savingDrawerPlanning}
+        releasing={releasing}
+        startingExecution={startingExecution}
+        finishingParticipation={finishingParticipation}
+        validating={validating}
+        reopeningRejected={reopeningRejected}
+        finishingOrder={finishingOrder}
+        onClose={closeQuickActionDrawer}
+        onOpenDetails={openDetailsFromQuickAction}
+        onPlan={handleUpdatePlanningFromDrawer}
+        onRelease={handleReleaseFromDrawer}
+        onStartExecution={handleStartExecutionFromDrawer}
+        onFinishParticipation={handleFinishParticipationFromDrawer}
+        onValidate={handleValidateFromDrawer}
+        onReopenRejected={handleReopenRejectedFromDrawer}
+        onFinishWorkOrder={handleFinishWorkOrderFromDrawer}
+      />
+
       <WorkOrderDetailsDrawer
         workOrder={selectedDetailsWorkOrder}
         report={workOrderDetailsReport}
@@ -883,110 +677,32 @@ export function WorkOrders() {
         loadingMembers={loadingOperationalMembers}
         savingDetails={savingDetails}
         savingPlanning={savingDrawerPlanning}
+        savingTaskStructure={addingTask}
+        applyingStandardTasks={applyingStandardTasks}
+        completingTaskId={completingTaskId}
+        markingTaskNotApplicableId={markingTaskNotApplicableId}
+        updatingTaskId={updatingTaskId}
+        deletingTaskId={deletingTaskId}
+        releasing={releasing}
+        startingExecution={startingExecution}
+        finishingParticipation={finishingParticipation}
+        finishingOrder={finishingOrder}
+        validating={validating}
         onClose={closeDetailsDrawer}
         onUpdateDetails={handleUpdateWorkOrderDetailsFromDrawer}
         onUpdatePlanning={handleUpdatePlanningFromDrawer}
-      />
-
-      <WorkOrderPlanningPanel
-        workOrder={selectedWorkOrder}
-        members={operationalMembers}
-        loadingMembers={loadingOperationalMembers}
-        selectedPrimaryUserId={selectedPrimaryUserId}
-        selectedSupportUserIds={selectedSupportUserIds}
-        scheduledStartAt={scheduledStartAt}
-        scheduledEndAt={scheduledEndAt}
-        estimatedDurationMinutes={estimatedDurationMinutes}
-        planningNote={planningNote}
-        planning={planning}
-        onSelectedPrimaryUserIdChange={setSelectedPrimaryUserId}
-        onSelectedSupportUserIdsChange={setSelectedSupportUserIds}
-        onScheduledStartAtChange={setScheduledStartAt}
-        onScheduledEndAtChange={setScheduledEndAt}
-        onEstimatedDurationMinutesChange={setEstimatedDurationMinutes}
-        onPlanningNoteChange={setPlanningNote}
-        onClose={closePlanningPanel}
-        onSubmit={handlePlanWorkOrder}
-      />
-
-      <WorkOrderTaskPanel
-        workOrder={selectedTaskWorkOrder}
-        taskTitle={taskTitle}
-        taskDescription={taskDescription}
-        taskResponseType={taskResponseType}
-        taskIsRequired={taskIsRequired}
-        taskRequiresPhoto={taskRequiresPhoto}
-        addingTask={addingTask}
-        applyingStandardTasks={applyingStandardTasks}
-        onTaskTitleChange={setTaskTitle}
-        onTaskDescriptionChange={setTaskDescription}
-        onTaskResponseTypeChange={setTaskResponseType}
-        onTaskIsRequiredChange={setTaskIsRequired}
-        onTaskRequiresPhotoChange={setTaskRequiresPhoto}
-        onClose={closeTaskPanel}
-        onApplyStandardTasks={handleApplyStandardTasks}
-        onSubmit={handleAddTask}
-      />
-
-      <WorkOrderReleasePanel
-        workOrder={selectedReleaseWorkOrder}
-        releaseReason={releaseReason}
-        releasing={releasing}
-        onReleaseReasonChange={setReleaseReason}
-        onClose={closeReleasePanel}
-        onSubmit={handleReleaseWorkOrder}
-      />
-
-      <WorkOrderExecutionPanel
-        workOrder={selectedExecutionWorkOrder}
-        executionTasks={executionTasks}
-        startReason={startReason}
-        finishParticipationReason={finishParticipationReason}
-        executionDescription={executionDescription}
-        identifiedCause={identifiedCause}
-        solutionApplied={solutionApplied}
-        finalResult={finalResult}
-        materialsUsed={materialsUsed}
-        internalNotes={internalNotes}
-        sendToValidation={sendToValidation}
-        startingExecution={startingExecution}
-        completingTaskId={completingTaskId}
-        finishingParticipation={finishingParticipation}
-        finishingOrder={finishingOrder}
-        onStartReasonChange={setStartReason}
-        onFinishParticipationReasonChange={setFinishParticipationReason}
-        onExecutionDescriptionChange={setExecutionDescription}
-        onIdentifiedCauseChange={setIdentifiedCause}
-        onSolutionAppliedChange={setSolutionApplied}
-        onFinalResultChange={setFinalResult}
-        onMaterialsUsedChange={setMaterialsUsed}
-        onInternalNotesChange={setInternalNotes}
-        onSendToValidationChange={setSendToValidation}
-        onClose={closeExecutionPanel}
-        onStartExecution={handleStartExecution}
-        onCompleteTask={handleCompleteTask}
-        onFinishParticipation={handleFinishParticipation}
-        onFinishWorkOrder={handleFinishWorkOrder}
-      />
-
-      <WorkOrderValidationPanel
-        workOrder={selectedValidationWorkOrder}
-        validationResult={validationResult}
-        validationComment={validationComment}
-        rejectionReason={rejectionReason}
-        validating={validating}
-        onValidationResultChange={setValidationResult}
-        onValidationCommentChange={setValidationComment}
-        onRejectionReasonChange={setRejectionReason}
-        onClose={closeValidationPanel}
-        onSubmit={handleValidateWorkOrder}
-      />
-
-      <WorkOrderReportPanel
-        workOrder={selectedReportWorkOrder}
-        report={workOrderReport}
-        loading={loadingReport}
-        onClose={closeReportPanel}
+        onAddTask={handleAddTaskFromDrawer}
+        onUpdateTask={handleUpdateTaskFromDrawer}
+        onDeleteTask={handleDeleteTaskFromDrawer}
+        onApplyStandardTasks={handleApplyStandardTasksFromDrawer}
+        onCompleteTask={handleCompleteTaskFromDrawer}
+        onMarkTaskNotApplicable={handleMarkTaskNotApplicableFromDrawer}
+        onRelease={handleReleaseFromDrawer}
+        onReopenRejected={handleReopenRejectedFromDrawer}
+        onStartExecution={handleStartExecutionFromDrawer}
+        onFinishParticipation={handleFinishParticipationFromDrawer}
+        onFinishWorkOrder={handleFinishWorkOrderFromDrawer}
+        onValidate={handleValidateFromDrawer}
       />
 
       <WorkOrdersFilters
@@ -1007,27 +723,15 @@ export function WorkOrders() {
         <WorkOrdersKanbanBoard
           loading={loading}
           workOrders={workOrders}
-          onPlan={openPlanningPanel}
-          onAddTask={openTaskPanel}
-          onRelease={openReleasePanel}
-          onReopenRejected={handleReopenRejectedWorkOrder}
-          onExecute={openExecutionPanel}
-          onValidate={openValidationPanel}
-          onOpenReport={openReportPanel}
           onOpenDetails={openDetailsDrawer}
+          onOpenAction={openQuickActionDrawer}
         />
       ) : (
         <WorkOrdersTable
           loading={loading}
           workOrders={workOrders}
-          onPlan={openPlanningPanel}
-          onAddTask={openTaskPanel}
-          onRelease={openReleasePanel}
-          onReopenRejected={handleReopenRejectedWorkOrder}
-          onExecute={openExecutionPanel}
-          onValidate={openValidationPanel}
-          onOpenReport={openReportPanel}
           onOpenDetails={openDetailsDrawer}
+          onOpenAction={openQuickActionDrawer}
         />
       )}
     </div>

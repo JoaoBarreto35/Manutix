@@ -1,18 +1,11 @@
 import type { KeyboardEvent } from "react";
 
 import {
-  CalendarClock,
-  CheckCircle2,
   Clock3,
-  FileText,
-  ListChecks,
   MapPin,
-  PlayCircle,
-  Send,
   Timer,
   UserRound,
 } from "lucide-react";
-
 import { Button } from "../../../../components/Button";
 import type { WorkOrderListItem } from "../../../../types/workOrder";
 import {
@@ -22,18 +15,13 @@ import {
   statusLabels,
 } from "../../constants/workOrderLabels";
 import { formatDateTime, formatMinutes } from "../../utils/workOrderFormatters";
+import { getWorkOrderPrimaryAction, type WorkOrderQuickAction } from "../../utils/workOrderQuickActions";
 import styles from "./styles.module.css";
 
 type WorkOrderCardProps = {
   order: WorkOrderListItem;
-  onPlan: (workOrder: WorkOrderListItem) => void;
-  onAddTask: (workOrder: WorkOrderListItem) => void;
-  onRelease: (workOrder: WorkOrderListItem) => void;
-  onReopenRejected: (workOrder: WorkOrderListItem) => void;
-  onExecute: (workOrder: WorkOrderListItem) => void;
-  onValidate: (workOrder: WorkOrderListItem) => void;
-  onOpenReport: (workOrder: WorkOrderListItem) => void;
   onOpenDetails: (workOrder: WorkOrderListItem) => void;
+  onOpenAction: (workOrder: WorkOrderListItem, action: WorkOrderQuickAction) => void;
 };
 
 const priorityClassMap: Record<WorkOrderListItem["priority"], string> = {
@@ -77,27 +65,6 @@ function getScheduleTooltip(order: WorkOrderListItem) {
   return `${status} · ${scheduled} · ${due}`;
 }
 
-function getPrimaryActionLabel(order: WorkOrderListItem) {
-  switch (order.status) {
-    case "waiting_planning":
-      return "Planejar";
-    case "planned":
-      return "Liberar";
-    case "released":
-      return "Iniciar";
-    case "in_execution":
-      return "Continuar";
-    case "paused":
-      return "Retomar";
-    case "waiting_validation":
-      return "Validar";
-    case "rejected_by_client":
-      return "Replanejar";
-    default:
-      return "Relatório";
-  }
-}
-
 function getRequiredTasksProgressPercent(order: WorkOrderListItem) {
   const progressPercent = Number(order.required_tasks_progress_percent ?? 0);
 
@@ -110,24 +77,14 @@ function getRequiredTasksProgressPercent(order: WorkOrderListItem) {
 
 export function WorkOrderCard({
   order,
-  onPlan,
-  onAddTask,
-  onRelease,
-  onReopenRejected,
-  onExecute,
-  onValidate,
-  onOpenReport,
   onOpenDetails,
+  onOpenAction,
 }: WorkOrderCardProps) {
   const scheduleReference = getScheduleReference(order);
   const scheduleTooltip = getScheduleTooltip(order);
-  const primaryActionLabel = getPrimaryActionLabel(order);
   const requiredTasksProgressPercent = getRequiredTasksProgressPercent(order);
   const requiredTasksProgressLabel = `${requiredTasksProgressPercent}%`;
-  const hasReportAction =
-    order.status === "waiting_validation" ||
-    order.status === "closed" ||
-    order.status === "rejected_by_client";
+  const primaryAction = getWorkOrderPrimaryAction(order);
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === "Enter" || event.key === " ") {
@@ -214,69 +171,18 @@ export function WorkOrderCard({
 
       <div className={styles.statusLine}>
         <span>{statusLabels[order.status]}</span>
-      </div>
-
-      <div className={styles.actions} onClick={(event) => event.stopPropagation()}>
-        {order.status === "waiting_planning" && (
-          <Button type="button" variant="secondary" size="sm" onClick={() => onPlan(order)}>
-            <CalendarClock size={16} />
-            {primaryActionLabel}
-          </Button>
-        )}
-
-        {order.status === "rejected_by_client" && (
-          <Button type="button" variant="warning" size="sm" onClick={() => onReopenRejected(order)}>
-            <CalendarClock size={16} />
-            {primaryActionLabel}
-          </Button>
-        )}
-
-        {(order.status === "waiting_planning" || order.status === "planned") && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => onAddTask(order)}>
-            <ListChecks size={16} />
-            Subtarefa
-          </Button>
-        )}
-
-        {order.status === "planned" && (
-          <Button type="button" variant="primary" size="sm" onClick={() => onRelease(order)}>
-            <Send size={16} />
-            {primaryActionLabel}
-          </Button>
-        )}
-
-        {order.status === "released" && (
-          <Button type="button" variant="primary" size="sm" onClick={() => onExecute(order)}>
-            <PlayCircle size={16} />
-            {primaryActionLabel}
-          </Button>
-        )}
-
-        {order.status === "in_execution" && (
-          <Button type="button" variant="primary" size="sm" onClick={() => onExecute(order)}>
-            <PlayCircle size={16} />
-            {primaryActionLabel}
-          </Button>
-        )}
-
-        {order.status === "paused" && (
-          <Button type="button" variant="primary" size="sm" onClick={() => onExecute(order)}>
-            <PlayCircle size={16} />
-            {primaryActionLabel}
-          </Button>
-        )}
-
-        {order.status === "waiting_validation" && (
-          <Button type="button" variant="success" size="sm" onClick={() => onValidate(order)}>
-            <CheckCircle2 size={16} />
-            {primaryActionLabel}
-          </Button>
-        )}
-
-        {hasReportAction && (
-          <Button type="button" variant="secondary" size="sm" onClick={() => onOpenReport(order)}>
-            <FileText size={16} />
-            Relatório
+        {primaryAction && (
+          <Button
+            type="button"
+            variant={primaryAction.action === "details" ? "secondary" : "primary"}
+            size="sm"
+            title={primaryAction.title}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenAction(order, primaryAction.action);
+            }}
+          >
+            {primaryAction.label}
           </Button>
         )}
       </div>

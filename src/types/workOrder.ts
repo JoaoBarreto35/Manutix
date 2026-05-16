@@ -117,6 +117,8 @@ export type WorkOrderListItem = {
   completed_required_tasks_count: number;
   required_tasks_progress_percent: number | null;
   attachments_count: number;
+  open_time_logs_count: number;
+  current_user_has_open_time_log: boolean;
 
   schedule_health:
     | "completed_on_time"
@@ -159,6 +161,22 @@ export type AddWorkOrderTaskInput = {
   isRequired: boolean;
   requiresPhoto: boolean;
   sortOrder: number;
+};
+
+export type UpdateWorkOrderTaskInput = {
+  taskId: string;
+  title: string;
+  description: string | null;
+  responseType: TaskResponseType;
+  isRequired: boolean;
+  requiresPhoto: boolean;
+  sortOrder: number;
+  reason: string | null;
+};
+
+export type DeleteWorkOrderTaskInput = {
+  taskId: string;
+  reason: string | null;
 };
 
 export type ApplyStandardWorkOrderTasksInput = {
@@ -213,6 +231,11 @@ export type CompleteWorkOrderTaskInput = {
   answerNumber: number | null;
   answerBoolean: boolean | null;
   complianceResult: boolean | null;
+};
+
+export type MarkWorkOrderTaskNotApplicableInput = {
+  taskId: string;
+  reason: string;
 };
 
 export type FinishWorkOrderInput = {

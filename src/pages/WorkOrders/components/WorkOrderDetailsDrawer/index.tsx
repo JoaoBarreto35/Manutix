@@ -1,34 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import {
-  AlertTriangle,
-  BadgeCheck,
-  CalendarClock,
-  CheckCircle2,
-  ClipboardList,
-  Clock3,
-  FileText,
-  History,
-  ListChecks,
-  MapPin,
-  Paperclip,
-  Save,
-  Timer,
-  UserRound,
-  UsersRound,
-  Wrench,
-  X,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, ListChecks, Timer } from "lucide-react";
 
 import { Button } from "../../../../components/Button";
-import type { WorkspaceOperationalMember } from "../../../../services/workspaceMemberService";
 import type {
   FinalResult,
   MaintenanceType,
-  PlanWorkOrderInput,
   PriorityLevel,
-  UpdateWorkOrderDetailsInput,
-  WorkOrderListItem,
-  WorkOrderReport,
+  TaskResponseType,
   WorkOrderReportHistory,
   WorkOrderReportTask,
   WorkOrderValidationResult,
@@ -37,144 +15,33 @@ import {
   finalResultLabels,
   maintenanceTypeLabels,
   priorityLabels,
-  responseTypeLabels,
   statusLabels,
-  validationResultLabels,
 } from "../../constants/workOrderLabels";
+import { drawerTabs, type DrawerTab } from "./constants";
+import {
+  createEmptyTaskDraft,
+  formatJsonValue,
+  getRequiredTasksProgressPercent,
+  getTaskCompletionPayload,
+  isBlank,
+  toIsoFromLocalInput,
+  toLocalDateTimeInput,
+} from "./helpers";
+import type { TaskCompletionDraft, WorkOrderDetailsDrawerProps } from "./types";
 import { formatDateTime, formatMinutes } from "../../utils/workOrderFormatters";
 import {
   canEditPlanning,
+  canEditTaskStructure,
   canEditWorkOrderDetails,
+  canFillTaskResponses,
 } from "../../utils/workOrderPermissions";
+import { DrawerHeader } from "./components/DrawerHeader";
+import { DrawerTabs } from "./components/DrawerTabs";
+import { TasksTab } from "./components/TasksTab";
+import { OverviewTab } from "./components/OverviewTab";
+import { RequestTab } from "./components/RequestTab";
+import { ExecutionTab } from "./components/ExecutionTab";
 import styles from "./styles.module.css";
-
-type WorkOrderDetailsDrawerProps = {
-  workOrder: WorkOrderListItem | null;
-  report: WorkOrderReport | null;
-  loading: boolean;
-  members: WorkspaceOperationalMember[];
-  loadingMembers: boolean;
-  savingDetails: boolean;
-  savingPlanning: boolean;
-  onClose: () => void;
-  onUpdateDetails: (input: UpdateWorkOrderDetailsInput) => Promise<void>;
-  onUpdatePlanning: (input: PlanWorkOrderInput) => Promise<void>;
-};
-
-type DrawerTab = "overview" | "request" | "tasks" | "execution";
-
-type DrawerTabConfig = {
-  id: DrawerTab;
-  label: string;
-};
-
-const drawerTabs: DrawerTabConfig[] = [
-  { id: "overview", label: "Resumo" },
-  { id: "request", label: "Solicitação" },
-  { id: "tasks", label: "Subtarefas" },
-  { id: "execution", label: "Execução" },
-];
-
-const priorityOptions: PriorityLevel[] = ["low", "medium", "high", "critical"];
-const maintenanceTypeOptions: MaintenanceType[] = [
-  "corrective",
-  "preventive",
-  "inspection",
-  "improvement",
-  "emergency",
-];
-
-const roleLabels: Record<WorkspaceOperationalMember["role"], string> = {
-  admin: "Admin",
-  manager: "Gestor",
-  planner: "Planejador",
-  technician: "Técnico",
-  client: "Cliente",
-};
-
-function formatValue(value: string | number | null | undefined) {
-  if (value === null || value === undefined || value === "") {
-    return "-";
-  }
-
-  return String(value);
-}
-
-function formatBoolean(value: boolean | null | undefined) {
-  if (value === true) return "Sim";
-  if (value === false) return "Não";
-  return "-";
-}
-
-function toLocalDateTimeInput(value: string | null | undefined) {
-  if (!value) return "";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "";
-
-  const timezoneOffset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
-}
-
-function toIsoFromLocalInput(value: string) {
-  return new Date(value).toISOString();
-}
-
-function getRequiredTasksProgressPercent(workOrder: WorkOrderListItem) {
-  const progressPercent = Number(workOrder.required_tasks_progress_percent ?? 0);
-
-  if (Number.isNaN(progressPercent)) return 0;
-
-  return Math.max(0, Math.min(100, Math.round(progressPercent)));
-}
-
-function getOriginLabel(workOrder: WorkOrderListItem) {
-  if (workOrder.origin === "service_request") {
-    return workOrder.service_request_code
-      ? `Chamado ${workOrder.service_request_code}`
-      : "Chamado";
-  }
-
-  if (workOrder.origin === "preventive_plan") {
-    return workOrder.preventive_plan_name
-      ? `Preventiva · ${workOrder.preventive_plan_name}`
-      : "Preventiva";
-  }
-
-  return "Interna";
-}
-
-function getTaskStatusLabel(status: WorkOrderReportTask["status"]) {
-  if (status === "completed") return "Concluída";
-  if (status === "not_applicable") return "Não aplicável";
-  return "Pendente";
-}
-
-function getValidationResultLabel(result: WorkOrderValidationResult) {
-  return validationResultLabels[result] ?? result;
-}
-
-function getFinalResultLabel(result: FinalResult | null | undefined) {
-  if (!result) return "-";
-  return finalResultLabels[result] ?? result;
-}
-
-function formatJsonValue(value: unknown) {
-  if (value === null || value === undefined) return "-";
-  if (typeof value === "string") return value;
-
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-function getMemberLabel(member: WorkspaceOperationalMember) {
-  const name = member.fullName?.trim() || member.email || "Usuário sem nome";
-  return `${name} · ${roleLabels[member.role]}`;
-}
 
 function renderHistoryDetails(item: WorkOrderReportHistory) {
   const hasOldValue = item.old_value !== null && item.old_value !== undefined;
@@ -209,9 +76,32 @@ export function WorkOrderDetailsDrawer({
   loadingMembers,
   savingDetails,
   savingPlanning,
+  savingTaskStructure,
+  applyingStandardTasks,
+  completingTaskId,
+  markingTaskNotApplicableId,
+  updatingTaskId,
+  deletingTaskId,
+  releasing,
+  startingExecution,
+  finishingParticipation,
+  finishingOrder,
+  validating,
   onClose,
   onUpdateDetails,
   onUpdatePlanning,
+  onAddTask,
+  onUpdateTask,
+  onDeleteTask,
+  onApplyStandardTasks,
+  onCompleteTask,
+  onMarkTaskNotApplicable,
+  onRelease,
+  onReopenRejected,
+  onStartExecution,
+  onFinishParticipation,
+  onFinishWorkOrder,
+  onValidate,
 }: WorkOrderDetailsDrawerProps) {
   const [activeTab, setActiveTab] = useState<DrawerTab>("overview");
   const [editingDetails, setEditingDetails] = useState(false);
@@ -230,6 +120,37 @@ export function WorkOrderDetailsDrawer({
   const [planningEndAt, setPlanningEndAt] = useState("");
   const [planningEstimatedMinutes, setPlanningEstimatedMinutes] = useState(120);
   const [planningReason, setPlanningReason] = useState("");
+
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskResponseType, setTaskResponseType] = useState<TaskResponseType>("checkbox");
+  const [taskIsRequired, setTaskIsRequired] = useState(true);
+  const [taskRequiresPhoto, setTaskRequiresPhoto] = useState(false);
+
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskTitle, setEditingTaskTitle] = useState("");
+  const [editingTaskDescription, setEditingTaskDescription] = useState("");
+  const [editingTaskResponseType, setEditingTaskResponseType] = useState<TaskResponseType>("checkbox");
+  const [editingTaskIsRequired, setEditingTaskIsRequired] = useState(true);
+  const [editingTaskRequiresPhoto, setEditingTaskRequiresPhoto] = useState(false);
+  const [editingTaskSortOrder, setEditingTaskSortOrder] = useState(0);
+  const [editingTaskReason, setEditingTaskReason] = useState("");
+
+  const [taskDrafts, setTaskDrafts] = useState<Record<string, TaskCompletionDraft>>({});
+
+  const [releaseReason, setReleaseReason] = useState("");
+  const [startReason, setStartReason] = useState("");
+  const [finishParticipationReason, setFinishParticipationReason] = useState("");
+  const [executionDescription, setExecutionDescription] = useState("");
+  const [identifiedCause, setIdentifiedCause] = useState("");
+  const [solutionApplied, setSolutionApplied] = useState("");
+  const [finalResult, setFinalResult] = useState<FinalResult>("resolved");
+  const [materialsUsed, setMaterialsUsed] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
+  const [validationResult, setValidationResult] =
+    useState<WorkOrderValidationResult>("approved");
+  const [validationComment, setValidationComment] = useState("");
+  const [rejectionReason, setRejectionReason] = useState("");
 
   useEffect(() => {
     if (!workOrder) return;
@@ -253,7 +174,34 @@ export function WorkOrderDetailsDrawer({
 
     setEditingDetails(false);
     setEditingPlanning(false);
-  }, [workOrder?.id, report?.assignments]);
+    setTaskTitle("");
+    setTaskDescription("");
+    setTaskResponseType("checkbox");
+    setTaskIsRequired(true);
+    setTaskRequiresPhoto(false);
+    setEditingTaskId(null);
+    setEditingTaskTitle("");
+    setEditingTaskDescription("");
+    setEditingTaskResponseType("checkbox");
+    setEditingTaskIsRequired(true);
+    setEditingTaskRequiresPhoto(false);
+    setEditingTaskSortOrder(0);
+    setEditingTaskReason("");
+    setTaskDrafts({});
+
+    setReleaseReason("");
+    setStartReason("");
+    setFinishParticipationReason("");
+    setExecutionDescription(workOrder.execution_description ?? "");
+    setIdentifiedCause(workOrder.identified_cause ?? "");
+    setSolutionApplied(workOrder.solution_applied ?? "");
+    setFinalResult(workOrder.result ?? "resolved");
+    setMaterialsUsed(report?.materials_used ?? "");
+    setInternalNotes(report?.internal_notes ?? "");
+    setValidationResult("approved");
+    setValidationComment("");
+    setRejectionReason("");
+  }, [workOrder?.id, report?.assignments, report?.materials_used, report?.internal_notes]);
 
   const technicianMembers = useMemo(
     () => members.filter((member) => member.role === "technician"),
@@ -262,7 +210,6 @@ export function WorkOrderDetailsDrawer({
 
   if (!workOrder) return null;
 
-  const requiredProgressPercent = getRequiredTasksProgressPercent(workOrder);
   const assignments = report?.assignments ?? [];
   const tasks = report?.tasks ?? [];
   const attachments = report?.attachments ?? [];
@@ -275,9 +222,18 @@ export function WorkOrderDetailsDrawer({
   const completedRequiredTasks = tasks.filter(
     (task) => task.is_required && task.status === "completed"
   ).length;
+  const requiredProgressPercent =
+    requiredTasks > 0
+      ? Math.round((completedRequiredTasks / requiredTasks) * 100)
+      : getRequiredTasksProgressPercent(workOrder);
+  const requiredTasksReady = requiredTasks === 0 || completedRequiredTasks >= requiredTasks;
 
   const detailsEditable = canEditWorkOrderDetails(workOrder.status);
   const planningEditable = canEditPlanning(workOrder.status);
+  const taskStructureEditable = canEditTaskStructure(workOrder.status);
+  const taskResponseFillable = canFillTaskResponses(workOrder.status);
+  const requiredFieldClassName = (missingRequiredValue: boolean) =>
+    missingRequiredValue ? styles.requiredMissing : undefined;
 
   function togglePlanningSupportUser(userId: string) {
     setPlanningSupportUserIds((current) =>
@@ -324,6 +280,552 @@ export function WorkOrderDetailsDrawer({
     setPlanningReason("");
   }
 
+  function updateTaskDraft(
+    taskId: string,
+    field: keyof TaskCompletionDraft,
+    value: string
+  ) {
+    setTaskDrafts((current) => ({
+      ...current,
+      [taskId]: {
+        ...(current[taskId] ?? createEmptyTaskDraft()),
+        [field]: value,
+      },
+    }));
+  }
+
+  function getTaskDraft(taskId: string) {
+    return taskDrafts[taskId] ?? createEmptyTaskDraft();
+  }
+
+  async function handleAddTaskFromDrawer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    await onAddTask({
+      workOrderId: workOrder.id,
+      title: taskTitle,
+      description: taskDescription.trim() || null,
+      responseType: taskResponseType,
+      isRequired: taskIsRequired,
+      requiresPhoto: taskRequiresPhoto,
+      sortOrder: tasks.length + 1,
+    });
+
+    setTaskTitle("");
+    setTaskDescription("");
+    setTaskResponseType("checkbox");
+    setTaskIsRequired(true);
+    setTaskRequiresPhoto(false);
+  }
+
+  function startEditingTask(task: WorkOrderReportTask) {
+    setEditingTaskId(task.id);
+    setEditingTaskTitle(task.title);
+    setEditingTaskDescription(task.description ?? "");
+    setEditingTaskResponseType(task.response_type);
+    setEditingTaskIsRequired(task.is_required);
+    setEditingTaskRequiresPhoto(task.requires_photo);
+    setEditingTaskSortOrder(task.sort_order);
+    setEditingTaskReason("");
+  }
+
+  function cancelEditingTask() {
+    setEditingTaskId(null);
+    setEditingTaskTitle("");
+    setEditingTaskDescription("");
+    setEditingTaskResponseType("checkbox");
+    setEditingTaskIsRequired(true);
+    setEditingTaskRequiresPhoto(false);
+    setEditingTaskSortOrder(0);
+    setEditingTaskReason("");
+  }
+
+  async function handleUpdateTaskFromDrawer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!editingTaskId) return;
+
+    await onUpdateTask({
+      taskId: editingTaskId,
+      title: editingTaskTitle,
+      description: editingTaskDescription.trim() || null,
+      responseType: editingTaskResponseType,
+      isRequired: editingTaskIsRequired,
+      requiresPhoto: editingTaskRequiresPhoto,
+      sortOrder: editingTaskSortOrder,
+      reason: editingTaskReason.trim() || null,
+    });
+
+    cancelEditingTask();
+  }
+
+  async function handleDeleteTaskFromDrawer(task: WorkOrderReportTask) {
+    const confirmed = window.confirm(
+      `Excluir a subtarefa "${task.title}"? Esta ação ficará registrada no histórico da OS.`
+    );
+
+    if (!confirmed) return;
+
+    await onDeleteTask({
+      taskId: task.id,
+      reason: "Exclusão manual pelo planejamento da OS.",
+    });
+
+    if (editingTaskId === task.id) {
+      cancelEditingTask();
+    }
+  }
+
+  async function handleCompleteTaskFromDrawer(task: WorkOrderReportTask) {
+    const draft = getTaskDraft(task.id);
+
+    if (task.response_type === "compliance" && draft.complianceStatus === "not_applicable") {
+      await onMarkTaskNotApplicable({
+        taskId: task.id,
+        reason:
+          draft.notApplicableReason.trim() ||
+          "Marcado como não aplicável na resposta de conformidade.",
+      });
+    } else {
+      await onCompleteTask(getTaskCompletionPayload(task, draft));
+    }
+
+    setTaskDrafts((current) => {
+      const next = { ...current };
+      delete next[task.id];
+      return next;
+    });
+  }
+
+  async function handleMarkTaskNotApplicableFromDrawer(task: WorkOrderReportTask) {
+    const draft = getTaskDraft(task.id);
+
+    await onMarkTaskNotApplicable({
+      taskId: task.id,
+      reason: draft.notApplicableReason.trim(),
+    });
+
+    setTaskDrafts((current) => {
+      const next = { ...current };
+      delete next[task.id];
+      return next;
+    });
+  }
+
+  async function handleReleaseFromDrawer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    await onRelease({
+      workOrderId: workOrder.id,
+      reason: releaseReason.trim() || null,
+    });
+
+    setReleaseReason("");
+  }
+
+  async function handleReopenRejectedFromDrawer() {
+    await onReopenRejected({
+      workOrderId: workOrder.id,
+      reason: "Reabertura para replanejamento após reprovação.",
+    });
+  }
+
+  async function handleStartExecutionFromDrawer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    await onStartExecution({
+      workOrderId: workOrder.id,
+      reason: startReason.trim() || null,
+    });
+
+    setStartReason("");
+  }
+
+  async function handleFinishParticipationFromDrawer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    await onFinishParticipation({
+      workOrderId: workOrder.id,
+      reason: finishParticipationReason.trim() || null,
+    });
+
+    setFinishParticipationReason("");
+  }
+
+  async function handleFinishWorkOrderFromDrawer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    await onFinishWorkOrder({
+      workOrderId: workOrder.id,
+      executionDescription,
+      identifiedCause,
+      solutionApplied,
+      result: finalResult,
+      materialsUsed: materialsUsed.trim() || null,
+      internalNotes: internalNotes.trim() || null,
+      sendToValidation: true,
+    });
+  }
+
+  async function handleValidateWorkOrderFromDrawer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    await onValidate({
+      workOrderId: workOrder.id,
+      validationResult,
+      rejectionReason: validationResult === "rejected" ? rejectionReason.trim() : null,
+      comment: validationComment.trim() || null,
+    });
+
+    setValidationComment("");
+    setRejectionReason("");
+  }
+
+
+  function renderWorkOrderActions() {
+    if (workOrder.status === "planned") {
+      return (
+        <form className={styles.inlineForm} onSubmit={handleReleaseFromDrawer}>
+          <div className={styles.formHeader}>
+            <strong>Liberar para execução</strong>
+            <span>Após liberar, a estrutura das subtarefas fica bloqueada.</span>
+          </div>
+
+          <label className={styles.fullField}>
+            Observação da liberação
+            <input
+              value={releaseReason}
+              onChange={(event) => setReleaseReason(event.target.value)}
+              placeholder="Opcional. Ex.: equipe orientada, materiais separados..."
+            />
+          </label>
+
+          <div className={styles.formActions}>
+            <Button type="submit" variant="primary" loading={releasing}>
+              Liberar OS
+            </Button>
+          </div>
+        </form>
+      );
+    }
+
+    if (workOrder.status === "rejected_by_client") {
+      return (
+        <div className={styles.inlineForm}>
+          <div className={styles.formHeader}>
+            <strong>Replanejar OS rejeitada</strong>
+            <span>A OS volta para planejamento para ajuste de escopo, equipe ou checklist.</span>
+          </div>
+
+          <div className={styles.formActions}>
+            <Button type="button" variant="warning" onClick={handleReopenRejectedFromDrawer}>
+              Reabrir planejamento
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    if (["released", "paused", "in_execution"].includes(workOrder.status)) {
+      return (
+        <div className={styles.actionStack}>
+          {!currentUserHasOpenTimeLog && workOrder.status !== "in_execution" && (
+            <form className={styles.inlineForm} onSubmit={handleStartExecutionFromDrawer}>
+              <div className={styles.formHeader}>
+                <strong>Apontamento de execução</strong>
+                <span>Use para iniciar ou retomar sua participação na OS.</span>
+              </div>
+
+              <label className={styles.fullField}>
+                Observação de início/retomada
+                <input
+                  value={startReason}
+                  onChange={(event) => setStartReason(event.target.value)}
+                  placeholder="Opcional."
+                />
+              </label>
+
+              <div className={styles.formActions}>
+                <Button type="submit" variant="primary" loading={startingExecution}>
+                  {workOrder.status === "paused" ? "Retomar execução" : "Iniciar execução"}
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {currentUserHasOpenTimeLog && (
+            <form className={styles.inlineForm} onSubmit={handleFinishParticipationFromDrawer}>
+              <div className={styles.formHeader}>
+                <strong>Finalizar minha participação</strong>
+                <span>Encerre seu apontamento aberto antes de finalizar a OS.</span>
+              </div>
+
+              <label className={styles.fullField}>
+                Observação da participação
+                <input
+                  value={finishParticipationReason}
+                  onChange={(event) => setFinishParticipationReason(event.target.value)}
+                  placeholder="Opcional."
+                />
+              </label>
+
+              <div className={styles.formActions}>
+                <Button type="submit" variant="secondary" loading={finishingParticipation}>
+                  Finalizar participação
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {workOrder.status === "in_execution" && !currentUserHasOpenTimeLog && !requiredTasksReady && (
+            <div className={styles.inlineNotice}>
+              Preencha as subtarefas obrigatórias na aba Subtarefas. A finalização da OS será liberada somente depois que não houver apontamentos abertos e o checklist obrigatório estiver completo.
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (workOrder.status === "waiting_validation") {
+      return (
+        <form className={styles.inlineForm} onSubmit={handleValidateWorkOrderFromDrawer}>
+          <div className={styles.formHeader}>
+            <strong>Validação da OS</strong>
+            <span>Aprove ou reprove o serviço executado.</span>
+          </div>
+
+          <label>
+            Resultado
+            <select
+              value={validationResult}
+              onChange={(event) => setValidationResult(event.target.value as WorkOrderValidationResult)}
+            >
+              <option value="approved">Aprovar</option>
+              <option value="rejected">Reprovar</option>
+            </select>
+          </label>
+
+          {validationResult === "rejected" && (
+            <label className={styles.fullField}>
+              Motivo da reprovação
+              <textarea
+                className={requiredFieldClassName(isBlank(rejectionReason))}
+                value={rejectionReason}
+                onChange={(event) => setRejectionReason(event.target.value)}
+                rows={3}
+                required
+              />
+            </label>
+          )}
+
+          <label className={styles.fullField}>
+            Comentário
+            <textarea
+              value={validationComment}
+              onChange={(event) => setValidationComment(event.target.value)}
+              rows={3}
+            />
+          </label>
+
+          <div className={styles.formActions}>
+            <Button type="submit" variant={validationResult === "approved" ? "success" : "danger"} loading={validating}>
+              {validationResult === "approved" ? "Aprovar OS" : "Reprovar OS"}
+            </Button>
+          </div>
+        </form>
+      );
+    }
+
+    return (
+      <p className={styles.muted}>
+        Nenhuma ação operacional disponível para este status.
+      </p>
+    );
+  }
+
+  function renderFinishOrderForm() {
+    if (!["released", "in_execution", "paused"].includes(workOrder.status)) {
+      return null;
+    }
+
+    if (hasOpenTimeLogs) {
+      return (
+        <div className={styles.inlineNotice}>
+          Finalize as participações/apontamentos abertos antes de fechar a OS.
+        </div>
+      );
+    }
+
+    if (!requiredTasksReady) {
+      return (
+        <div className={styles.inlineNotice}>
+          Finalize as subtarefas obrigatórias antes de fechar a OS.
+        </div>
+      );
+    }
+
+    return (
+      <form className={styles.inlineForm} onSubmit={handleFinishWorkOrderFromDrawer}>
+        <div className={styles.formHeader}>
+          <strong>Finalizar OS</strong>
+          <span>Preencha o que foi executado antes de enviar para validação ou fechamento.</span>
+        </div>
+
+        <label className={styles.fullField}>
+          Descrição da execução
+          <textarea
+            className={requiredFieldClassName(isBlank(executionDescription))}
+            value={executionDescription}
+            onChange={(event) => setExecutionDescription(event.target.value)}
+            rows={3}
+            required
+          />
+        </label>
+
+        <label className={styles.fullField}>
+          Causa identificada
+          <textarea
+            value={identifiedCause}
+            onChange={(event) => setIdentifiedCause(event.target.value)}
+            rows={2}
+          />
+        </label>
+
+        <label className={styles.fullField}>
+          Solução aplicada
+          <textarea
+            value={solutionApplied}
+            onChange={(event) => setSolutionApplied(event.target.value)}
+            rows={2}
+          />
+        </label>
+
+        <label>
+          Resultado
+          <select
+            value={finalResult}
+            onChange={(event) => setFinalResult(event.target.value as FinalResult)}
+          >
+            {Object.entries(finalResultLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className={styles.fullField}>
+          Materiais utilizados
+          <textarea
+            value={materialsUsed}
+            onChange={(event) => setMaterialsUsed(event.target.value)}
+            rows={2}
+          />
+        </label>
+
+        <label className={styles.fullField}>
+          Observações internas
+          <textarea
+            value={internalNotes}
+            onChange={(event) => setInternalNotes(event.target.value)}
+            rows={2}
+          />
+        </label>
+
+        <div className={styles.formActions}>
+          <Button type="submit" variant="success" loading={finishingOrder}>
+            Finalizar OS
+          </Button>
+        </div>
+      </form>
+    );
+  }
+
+  function renderTaskResponseField(task: WorkOrderReportTask) {
+    const draft = getTaskDraft(task.id);
+
+    if (task.response_type === "text") {
+      return (
+        <label className={styles.fullField}>
+          Resposta
+          <textarea
+            className={requiredFieldClassName(task.is_required && isBlank(draft.answerText))}
+            value={draft.answerText}
+            onChange={(event) =>
+              updateTaskDraft(task.id, "answerText", event.target.value)
+            }
+            rows={2}
+            placeholder="Descreva a resposta da subtarefa."
+            required={task.is_required}
+          />
+        </label>
+      );
+    }
+
+    if (task.response_type === "number") {
+      return (
+        <label>
+          Valor numérico
+          <input
+            className={requiredFieldClassName(task.is_required && isBlank(draft.answerNumber))}
+            type="number"
+            value={draft.answerNumber}
+            onChange={(event) =>
+              updateTaskDraft(task.id, "answerNumber", event.target.value)
+            }
+            required={task.is_required}
+          />
+        </label>
+      );
+    }
+
+    if (task.response_type === "boolean") {
+      return (
+        <label>
+          Resposta
+          <select
+            value={draft.answerBoolean}
+            onChange={(event) =>
+              updateTaskDraft(task.id, "answerBoolean", event.target.value)
+            }
+          >
+            <option value="true">Sim</option>
+            <option value="false">Não</option>
+          </select>
+        </label>
+      );
+    }
+
+    if (task.response_type === "compliance") {
+      return (
+        <label>
+          Resultado de conformidade
+          <select
+            value={draft.complianceStatus}
+            onChange={(event) =>
+              updateTaskDraft(task.id, "complianceStatus", event.target.value)
+            }
+          >
+            <option value="conforme">Conforme</option>
+            <option value="nao_conforme">Não conforme</option>
+            <option value="nao_conforme_corrigido">Não conforme corrigido</option>
+            <option value="not_applicable">Não aplicável</option>
+          </select>
+        </label>
+      );
+    }
+
+    if (task.response_type === "photo") {
+      return (
+        <p className={styles.muted}>
+          Esta subtarefa exige evidência. A conclusão confirma a etapa, e o anexo pode ser registrado na área de evidências.
+        </p>
+      );
+    }
+
+    return null;
+  }
+
   return (
     <div className={styles.backdrop} role="presentation" onMouseDown={onClose}>
       <aside
@@ -333,18 +835,7 @@ export function WorkOrderDetailsDrawer({
         aria-label={`Detalhes da OS ${workOrder.work_order_code}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <header className={styles.header}>
-          <div className={styles.headerContent}>
-            <span className={styles.eyebrow}>{workOrder.work_order_code}</span>
-            <h2>{workOrder.title}</h2>
-            <p>{getOriginLabel(workOrder)}</p>
-          </div>
-
-          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-            <X size={18} />
-            Fechar
-          </Button>
-        </header>
+<DrawerHeader workOrder={workOrder} onClose={onClose} />
 
         <div className={styles.statusRow}>
           <span className={`${styles.pill} ${styles[workOrder.status]}`}>
@@ -359,725 +850,135 @@ export function WorkOrderDetailsDrawer({
           <span className={styles.pill}>{workOrder.schedule_health}</span>
         </div>
 
-        <nav className={styles.tabs} aria-label="Seções da OS">
-          {drawerTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={activeTab === tab.id ? styles.activeTab : styles.tab}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+<DrawerTabs tabs={drawerTabs} activeTab={activeTab} onTabChange={setActiveTab} />
 
         {loading && <div className={styles.loading}>Carregando detalhes completos...</div>}
 
         <div className={styles.content}>
           {activeTab === "overview" && (
-            <div className={styles.tabPanel}>
-              <section className={styles.section}>
-                <div className={styles.sectionHeader}>
-                  <h3>
-                    <FileText size={17} />
-                    Dados principais
-                  </h3>
-
-                  {detailsEditable && !editingDetails && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setEditingDetails(true)}
-                    >
-                      Editar
-                    </Button>
-                  )}
-                </div>
-
-                {editingDetails ? (
-                  <form className={styles.editForm} onSubmit={handleDetailsSubmit}>
-                    <label className={styles.fullField}>
-                      Título
-                      <input
-                        value={detailsTitle}
-                        onChange={(event) => setDetailsTitle(event.target.value)}
-                        required
-                      />
-                    </label>
-
-                    <label className={styles.fullField}>
-                      Descrição
-                      <textarea
-                        value={detailsDescription}
-                        onChange={(event) => setDetailsDescription(event.target.value)}
-                        rows={4}
-                      />
-                    </label>
-
-                    <label>
-                      Prioridade
-                      <select
-                        value={detailsPriority}
-                        onChange={(event) =>
-                          setDetailsPriority(event.target.value as PriorityLevel)
-                        }
-                      >
-                        {priorityOptions.map((priority) => (
-                          <option key={priority} value={priority}>
-                            {priorityLabels[priority]}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label>
-                      Tipo de manutenção
-                      <select
-                        value={detailsMaintenanceType}
-                        onChange={(event) =>
-                          setDetailsMaintenanceType(event.target.value as MaintenanceType)
-                        }
-                      >
-                        {maintenanceTypeOptions.map((maintenanceType) => (
-                          <option key={maintenanceType} value={maintenanceType}>
-                            {maintenanceTypeLabels[maintenanceType]}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className={styles.fullField}>
-                      Motivo da alteração
-                      <textarea
-                        value={detailsReason}
-                        onChange={(event) => setDetailsReason(event.target.value)}
-                        rows={2}
-                        placeholder="Ex: ajuste de escopo após revisão do planejamento."
-                      />
-                    </label>
-
-                    <div className={styles.formActions}>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => setEditingDetails(false)}
-                        disabled={savingDetails}
-                      >
-                        Cancelar
-                      </Button>
-                      <Button type="submit" variant="primary" loading={savingDetails}>
-                        <Save size={16} />
-                        Salvar dados
-                      </Button>
-                    </div>
-                  </form>
-                ) : (
-                  <>
-                    {!detailsEditable && (
-                      <p className={styles.readOnlyNotice}>
-                        Dados principais ficam bloqueados após liberação para execução.
-                      </p>
-                    )}
-
-                    <div className={styles.textBlock}>
-                      <span>Descrição da OS</span>
-                      <p>{workOrder.description || "Sem descrição."}</p>
-                    </div>
-
-                    <div className={styles.infoGrid}>
-                      <div>
-                        <span>Prioridade</span>
-                        <strong>{priorityLabels[workOrder.priority]}</strong>
-                      </div>
-                      <div>
-                        <span>Tipo</span>
-                        <strong>{maintenanceTypeLabels[workOrder.maintenance_type]}</strong>
-                      </div>
-                      <div>
-                        <span>Status</span>
-                        <strong>{statusLabels[workOrder.status]}</strong>
-                      </div>
-                      <div>
-                        <span>Origem</span>
-                        <strong>{getOriginLabel(workOrder)}</strong>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </section>
-
-              <section className={styles.section}>
-                <h3>
-                  <MapPin size={17} />
-                  Ativo / local
-                </h3>
-
-                <div className={styles.infoGrid}>
-                  <div>
-                    <span>Código</span>
-                    <strong>{workOrder.asset_code}</strong>
-                  </div>
-                  <div>
-                    <span>Nome</span>
-                    <strong>{workOrder.asset_name}</strong>
-                  </div>
-                  <div>
-                    <span>Tipo</span>
-                    <strong>{workOrder.asset_type_name}</strong>
-                  </div>
-                  <div>
-                    <span>Criticidade</span>
-                    <strong>{workOrder.asset_criticality}</strong>
-                  </div>
-                </div>
-              </section>
-
-              <section className={styles.section}>
-                <div className={styles.sectionHeader}>
-                  <h3>
-                    <CalendarClock size={17} />
-                    Planejamento / equipe
-                  </h3>
-
-                  {planningEditable && !editingPlanning && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setEditingPlanning(true)}
-                    >
-                      Editar planejamento
-                    </Button>
-                  )}
-                </div>
-
-                {editingPlanning ? (
-                  <form className={styles.editForm} onSubmit={handlePlanningSubmit}>
-                    <label className={styles.fullField}>
-                      Responsável principal
-                      <select
-                        value={planningPrimaryUserId}
-                        onChange={(event) => {
-                          const nextPrimaryUserId = event.target.value;
-                          setPlanningPrimaryUserId(nextPrimaryUserId);
-                          setPlanningSupportUserIds((current) =>
-                            current.filter((userId) => userId !== nextPrimaryUserId)
-                          );
-                        }}
-                        disabled={loadingMembers || savingPlanning}
-                        required
-                      >
-                        <option value="">
-                          {loadingMembers
-                            ? "Carregando membros..."
-                            : "Selecione um responsável"}
-                        </option>
-                        {members.map((member) => (
-                          <option key={member.userId} value={member.userId}>
-                            {getMemberLabel(member)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <fieldset className={styles.fullField}>
-                      <legend>Equipe de apoio</legend>
-                      <p className={styles.muted}>
-                        Apenas técnicos podem entrar como apoio de execução.
-                      </p>
-
-                      {technicianMembers.length > 0 ? (
-                        <div className={styles.checkboxGroup}>
-                          {technicianMembers.map((member) => (
-                            <label key={member.userId} className={styles.checkboxOption}>
-                              <input
-                                type="checkbox"
-                                checked={planningSupportUserIds.includes(member.userId)}
-                                disabled={
-                                  savingPlanning || member.userId === planningPrimaryUserId
-                                }
-                                onChange={() => togglePlanningSupportUser(member.userId)}
-                              />
-                              <span>{getMemberLabel(member)}</span>
-                            </label>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className={styles.muted}>Nenhum técnico ativo encontrado.</p>
-                      )}
-                    </fieldset>
-
-                    <label>
-                      Início programado
-                      <input
-                        type="datetime-local"
-                        value={planningStartAt}
-                        onChange={(event) => setPlanningStartAt(event.target.value)}
-                        required
-                      />
-                    </label>
-
-                    <label>
-                      Fim programado
-                      <input
-                        type="datetime-local"
-                        value={planningEndAt}
-                        onChange={(event) => setPlanningEndAt(event.target.value)}
-                        required
-                      />
-                    </label>
-
-                    <label>
-                      Duração estimada em minutos
-                      <input
-                        type="number"
-                        min={1}
-                        value={planningEstimatedMinutes}
-                        onChange={(event) =>
-                          setPlanningEstimatedMinutes(Number(event.target.value))
-                        }
-                        required
-                      />
-                    </label>
-
-                    <label className={styles.fullField}>
-                      Motivo / observação
-                      <textarea
-                        value={planningReason}
-                        onChange={(event) => setPlanningReason(event.target.value)}
-                        rows={2}
-                      />
-                    </label>
-
-                    <div className={styles.formActions}>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => setEditingPlanning(false)}
-                        disabled={savingPlanning}
-                      >
-                        Cancelar
-                      </Button>
-                      <Button type="submit" variant="primary" loading={savingPlanning}>
-                        <Save size={16} />
-                        Salvar planejamento
-                      </Button>
-                    </div>
-                  </form>
-                ) : (
-                  <>
-                    {!planningEditable && (
-                      <p className={styles.readOnlyNotice}>
-                        Planejamento e equipe ficam bloqueados após liberação.
-                      </p>
-                    )}
-
-                    <div className={styles.infoGrid}>
-                      <div>
-                        <span>Responsável</span>
-                        <strong>{workOrder.primary_user_name || "Não definido"}</strong>
-                      </div>
-                      <div>
-                        <span>Equipe</span>
-                        <strong>{workOrder.assigned_users_count}</strong>
-                      </div>
-                      <div>
-                        <span>Início programado</span>
-                        <strong>{formatDateTime(workOrder.scheduled_start_at)}</strong>
-                      </div>
-                      <div>
-                        <span>Fim programado</span>
-                        <strong>{formatDateTime(workOrder.scheduled_end_at)}</strong>
-                      </div>
-                      <div>
-                        <span>Prazo calculado</span>
-                        <strong>{formatDateTime(workOrder.calculated_due_at)}</strong>
-                      </div>
-                      <div>
-                        <span>Tempo estimado</span>
-                        <strong>{formatMinutes(workOrder.estimated_duration_minutes)}</strong>
-                      </div>
-                    </div>
-
-                    {assignments.length > 0 && (
-                      <details className={styles.collapseBlock}>
-                        <summary>Ver equipe detalhada</summary>
-                        <div className={styles.compactList}>
-                          {assignments.map((assignment) => (
-                            <div key={assignment.assignment_id} className={styles.compactItem}>
-                              <strong>{assignment.user_name || "Usuário sem nome"}</strong>
-                              <span>
-                                {assignment.is_primary ? "Responsável principal" : "Apoio"} · {assignment.role} · {assignment.status}
-                              </span>
-                              <span>
-                                Estimado: {formatMinutes(assignment.estimated_minutes)} · Apontado: {formatMinutes(assignment.total_minutes)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-                  </>
-                )}
-              </section>
-
-              <section className={styles.section}>
-                <h3>
-                  <ListChecks size={17} />
-                  Progresso
-                </h3>
-
-                <div className={styles.progressCard}>
-                  <div>
-                    <span>Checklist obrigatório</span>
-                    <strong>{requiredProgressPercent}%</strong>
-                  </div>
-                  <div className={styles.progressSummary}>
-                    <div className={styles.progressTrack}>
-                      <span style={{ width: `${requiredProgressPercent}%` }} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className={styles.infoGrid}>
-                  <div>
-                    <span>Obrigatórias</span>
-                    <strong>{completedRequiredTasks}/{requiredTasks}</strong>
-                  </div>
-                  <div>
-                    <span>Total concluídas</span>
-                    <strong>{completedTasks}/{tasks.length || workOrder.tasks_count}</strong>
-                  </div>
-                  <div>
-                    <span>Horas apontadas</span>
-                    <strong>{formatMinutes(workOrder.total_labor_minutes)}</strong>
-                  </div>
-                  <div>
-                    <span>Anexos</span>
-                    <strong>{attachments.length || workOrder.attachments_count}</strong>
-                  </div>
-                </div>
-              </section>
-            </div>
+            <OverviewTab
+              workOrder={workOrder}
+              assignments={assignments}
+              tasks={tasks}
+              attachments={attachments}
+              completedTasks={completedTasks}
+              requiredTasks={requiredTasks}
+              completedRequiredTasks={completedRequiredTasks}
+              requiredProgressPercent={requiredProgressPercent}
+              detailsEditable={detailsEditable}
+              planningEditable={planningEditable}
+              editingDetails={editingDetails}
+              setEditingDetails={setEditingDetails}
+              editingPlanning={editingPlanning}
+              setEditingPlanning={setEditingPlanning}
+              detailsTitle={detailsTitle}
+              setDetailsTitle={setDetailsTitle}
+              detailsDescription={detailsDescription}
+              setDetailsDescription={setDetailsDescription}
+              detailsPriority={detailsPriority}
+              setDetailsPriority={setDetailsPriority}
+              detailsMaintenanceType={detailsMaintenanceType}
+              setDetailsMaintenanceType={setDetailsMaintenanceType}
+              detailsReason={detailsReason}
+              setDetailsReason={setDetailsReason}
+              savingDetails={savingDetails}
+              handleDetailsSubmit={handleDetailsSubmit}
+              members={members}
+              technicianMembers={technicianMembers}
+              loadingMembers={loadingMembers}
+              savingPlanning={savingPlanning}
+              planningPrimaryUserId={planningPrimaryUserId}
+              setPlanningPrimaryUserId={setPlanningPrimaryUserId}
+              planningSupportUserIds={planningSupportUserIds}
+              setPlanningSupportUserIds={setPlanningSupportUserIds}
+              togglePlanningSupportUser={togglePlanningSupportUser}
+              planningStartAt={planningStartAt}
+              setPlanningStartAt={setPlanningStartAt}
+              planningEndAt={planningEndAt}
+              setPlanningEndAt={setPlanningEndAt}
+              planningEstimatedMinutes={planningEstimatedMinutes}
+              setPlanningEstimatedMinutes={setPlanningEstimatedMinutes}
+              planningReason={planningReason}
+              setPlanningReason={setPlanningReason}
+              handlePlanningSubmit={handlePlanningSubmit}
+              requiredFieldClassName={requiredFieldClassName}
+            />
           )}
 
           {activeTab === "request" && (
-            <div className={styles.tabPanel}>
-              <section className={styles.section}>
-                <h3>
-                  <ClipboardList size={17} />
-                  Solicitação / origem
-                </h3>
-
-                <div className={styles.infoGrid}>
-                  <div>
-                    <span>Origem</span>
-                    <strong>{getOriginLabel(workOrder)}</strong>
-                  </div>
-                  <div>
-                    <span>Criada por</span>
-                    <strong>{formatValue(workOrder.created_by_name)}</strong>
-                  </div>
-                  <div>
-                    <span>Criada em</span>
-                    <strong>{formatDateTime(workOrder.created_at)}</strong>
-                  </div>
-                  <div>
-                    <span>Atualizada em</span>
-                    <strong>{formatDateTime(workOrder.updated_at)}</strong>
-                  </div>
-                </div>
-              </section>
-
-              {serviceRequest && (
-                <section className={styles.section}>
-                  <h3>
-                    <FileText size={17} />
-                    Chamado de origem
-                  </h3>
-
-                  <div className={styles.infoGrid}>
-                    <div>
-                      <span>Código</span>
-                      <strong>{serviceRequest.code}</strong>
-                    </div>
-                    <div>
-                      <span>Solicitante</span>
-                      <strong>{formatValue(serviceRequest.opened_by_name)}</strong>
-                    </div>
-                    <div>
-                      <span>Problema padrão</span>
-                      <strong>{formatValue(serviceRequest.problem)}</strong>
-                    </div>
-                    <div>
-                      <span>Abertura</span>
-                      <strong>{formatDateTime(serviceRequest.created_at)}</strong>
-                    </div>
-                  </div>
-
-                  <div className={styles.textStack}>
-                    {serviceRequest.problem_other_text && (
-                      <div className={styles.textBlock}>
-                        <span>Complemento / outro problema</span>
-                        <p>{serviceRequest.problem_other_text}</p>
-                      </div>
-                    )}
-                    <div className={styles.textBlock}>
-                      <span>Descrição original</span>
-                      <p>{serviceRequest.description}</p>
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {preventive && (
-                <section className={styles.section}>
-                  <h3>
-                    <Wrench size={17} />
-                    Preventiva de origem
-                  </h3>
-
-                  <div className={styles.infoGrid}>
-                    <div>
-                      <span>Plano</span>
-                      <strong>{preventive.plan_name}</strong>
-                    </div>
-                    <div>
-                      <span>Tarefa</span>
-                      <strong>{preventive.task_name}</strong>
-                    </div>
-                    <div>
-                      <span>Vencimento</span>
-                      <strong>{formatDateTime(preventive.due_at)}</strong>
-                    </div>
-                    <div>
-                      <span>Data prevista</span>
-                      <strong>{formatValue(preventive.due_date)}</strong>
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {!serviceRequest && !preventive && (
-                <section className={styles.section}>
-                  <h3>
-                    <FileText size={17} />
-                    Atividade interna
-                  </h3>
-                  <div className={styles.textBlock}>
-                    <span>Descrição</span>
-                    <p>{workOrder.description || "Sem descrição."}</p>
-                  </div>
-                </section>
-              )}
-
-              <section className={styles.section}>
-                <h3>
-                  <History size={17} />
-                  Histórico
-                </h3>
-
-                {history.length > 0 ? (
-                  <div className={styles.timeline}>
-                    {history.map((item) => (
-                      <div key={item.id} className={styles.timelineItem}>
-                        <strong>{item.action}</strong>
-                        <span>
-                          {formatValue(item.performed_by_name)} · {formatDateTime(item.created_at)}
-                        </span>
-                        {item.reason && <small>Motivo: {item.reason}</small>}
-                        {renderHistoryDetails(item)}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={styles.muted}>Nenhum histórico carregado.</p>
-                )}
-              </section>
-            </div>
+            <RequestTab
+              workOrder={workOrder}
+              serviceRequest={serviceRequest}
+              preventive={preventive}
+              history={history}
+              renderHistoryDetails={renderHistoryDetails}
+            />
           )}
 
           {activeTab === "tasks" && (
-            <div className={styles.tabPanel}>
-              <section className={styles.section}>
-                <h3>
-                  <ListChecks size={17} />
-                  Subtarefas / checklist
-                </h3>
-
-                <div className={styles.progressCard}>
-                  <div>
-                    <span>Obrigatórias concluídas</span>
-                    <strong>{completedRequiredTasks}/{requiredTasks} · {requiredProgressPercent}%</strong>
-                  </div>
-                  <div className={styles.progressSummary}>
-                    <div className={styles.progressTrack}>
-                      <span style={{ width: `${requiredProgressPercent}%` }} />
-                    </div>
-                  </div>
-                </div>
-
-                {tasks.length > 0 ? (
-                  <div className={styles.compactList}>
-                    {tasks.map((task) => (
-                      <div key={task.id} className={styles.compactItem}>
-                        <div className={styles.itemHeader}>
-                          <strong>{task.title}</strong>
-                          <span className={`${styles.smallBadge} ${styles[task.status]}`}>
-                            {getTaskStatusLabel(task.status)}
-                          </span>
-                        </div>
-                        {task.description && <p>{task.description}</p>}
-                        <span>
-                          {responseTypeLabels[task.response_type]} · {task.is_required ? "Obrigatória" : "Opcional"} · {task.requires_photo ? "Exige foto" : "Sem foto obrigatória"}
-                        </span>
-                        <span>
-                          Concluída por: {formatValue(task.completed_by_name)} · {formatDateTime(task.completed_at)}
-                        </span>
-                        {(task.answer_text || task.answer_number !== null || task.answer_boolean !== null || task.compliance_result !== null || task.not_applicable_reason) && (
-                          <div className={styles.answerBox}>
-                            {task.answer_text && <span>Texto: {task.answer_text}</span>}
-                            {task.answer_number !== null && <span>Número: {task.answer_number}</span>}
-                            {task.answer_boolean !== null && <span>Sim/Não: {formatBoolean(task.answer_boolean)}</span>}
-                            {task.compliance_result !== null && <span>Conformidade: {formatBoolean(task.compliance_result)}</span>}
-                            {task.not_applicable_reason && <span>Não aplicável: {task.not_applicable_reason}</span>}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={styles.muted}>Nenhuma subtarefa detalhada carregada.</p>
-                )}
-              </section>
-            </div>
+            <TasksTab
+              workOrder={workOrder}
+              tasks={tasks}
+              completedRequiredTasks={completedRequiredTasks}
+              requiredTasks={requiredTasks}
+              requiredProgressPercent={requiredProgressPercent}
+              taskStructureEditable={taskStructureEditable}
+              taskResponseFillable={taskResponseFillable}
+              applyingStandardTasks={applyingStandardTasks}
+              savingTaskStructure={savingTaskStructure}
+              completingTaskId={completingTaskId}
+              markingTaskNotApplicableId={markingTaskNotApplicableId}
+              updatingTaskId={updatingTaskId}
+              deletingTaskId={deletingTaskId}
+              taskTitle={taskTitle}
+              setTaskTitle={setTaskTitle}
+              taskDescription={taskDescription}
+              setTaskDescription={setTaskDescription}
+              taskResponseType={taskResponseType}
+              setTaskResponseType={setTaskResponseType}
+              taskIsRequired={taskIsRequired}
+              setTaskIsRequired={setTaskIsRequired}
+              taskRequiresPhoto={taskRequiresPhoto}
+              setTaskRequiresPhoto={setTaskRequiresPhoto}
+              editingTaskId={editingTaskId}
+              editingTaskTitle={editingTaskTitle}
+              setEditingTaskTitle={setEditingTaskTitle}
+              editingTaskDescription={editingTaskDescription}
+              setEditingTaskDescription={setEditingTaskDescription}
+              editingTaskResponseType={editingTaskResponseType}
+              setEditingTaskResponseType={setEditingTaskResponseType}
+              editingTaskIsRequired={editingTaskIsRequired}
+              setEditingTaskIsRequired={setEditingTaskIsRequired}
+              editingTaskRequiresPhoto={editingTaskRequiresPhoto}
+              setEditingTaskRequiresPhoto={setEditingTaskRequiresPhoto}
+              editingTaskSortOrder={editingTaskSortOrder}
+              setEditingTaskSortOrder={setEditingTaskSortOrder}
+              editingTaskReason={editingTaskReason}
+              setEditingTaskReason={setEditingTaskReason}
+              requiredFieldClassName={requiredFieldClassName}
+              getTaskDraft={getTaskDraft}
+              updateTaskDraft={updateTaskDraft}
+              renderTaskResponseField={renderTaskResponseField}
+              onApplyStandardTasks={onApplyStandardTasks}
+              handleAddTaskFromDrawer={handleAddTaskFromDrawer}
+              handleUpdateTaskFromDrawer={handleUpdateTaskFromDrawer}
+              startEditingTask={startEditingTask}
+              cancelEditingTask={cancelEditingTask}
+              handleDeleteTaskFromDrawer={handleDeleteTaskFromDrawer}
+              handleCompleteTaskFromDrawer={handleCompleteTaskFromDrawer}
+              handleMarkTaskNotApplicableFromDrawer={handleMarkTaskNotApplicableFromDrawer}
+            />
           )}
 
           {activeTab === "execution" && (
-            <div className={styles.tabPanel}>
-              <section className={styles.section}>
-                <h3>
-                  <Clock3 size={17} />
-                  Execução e fechamento
-                </h3>
-
-                <div className={styles.infoGrid}>
-                  <div>
-                    <span>Início real</span>
-                    <strong>{formatDateTime(workOrder.actual_started_at)}</strong>
-                  </div>
-                  <div>
-                    <span>Fim real</span>
-                    <strong>{formatDateTime(workOrder.actual_finished_at)}</strong>
-                  </div>
-                  <div>
-                    <span>Duração calendário</span>
-                    <strong>{formatMinutes(report?.calendar_duration_minutes ?? null)}</strong>
-                  </div>
-                  <div>
-                    <span>Horas apontadas</span>
-                    <strong>{formatMinutes(workOrder.total_labor_minutes)}</strong>
-                  </div>
-                  <div>
-                    <span>Resultado</span>
-                    <strong>{getFinalResultLabel(workOrder.result)}</strong>
-                  </div>
-                  <div>
-                    <span>Fechada por</span>
-                    <strong>{formatValue(workOrder.closed_by_name)}</strong>
-                  </div>
-                  <div>
-                    <span>Fechada em</span>
-                    <strong>{formatDateTime(workOrder.closed_at)}</strong>
-                  </div>
-                  <div>
-                    <span>Anexos</span>
-                    <strong>{attachments.length || workOrder.attachments_count}</strong>
-                  </div>
-                </div>
-
-                <div className={styles.textStack}>
-                  <div className={styles.textBlock}>
-                    <span>Descrição da execução</span>
-                    <p>{workOrder.execution_description || "-"}</p>
-                  </div>
-                  <div className={styles.textBlock}>
-                    <span>Causa identificada</span>
-                    <p>{workOrder.identified_cause || "-"}</p>
-                  </div>
-                  <div className={styles.textBlock}>
-                    <span>Solução aplicada</span>
-                    <p>{workOrder.solution_applied || "-"}</p>
-                  </div>
-                  <div className={styles.textBlock}>
-                    <span>Materiais utilizados</span>
-                    <p>{report?.materials_used || "-"}</p>
-                  </div>
-                  <div className={styles.textBlock}>
-                    <span>Observações internas</span>
-                    <p>{report?.internal_notes || "-"}</p>
-                  </div>
-                </div>
-              </section>
-
-              <section className={styles.section}>
-                <h3>
-                  <Paperclip size={17} />
-                  Anexos / evidências
-                </h3>
-
-                {attachments.length > 0 ? (
-                  <div className={styles.compactList}>
-                    {attachments.map((attachment) => (
-                      <div key={attachment.id} className={styles.compactItem}>
-                        <strong>{attachment.file_name}</strong>
-                        <span>
-                          {attachment.attachment_type} · {formatValue(attachment.mime_type)} · {formatDateTime(attachment.created_at)}
-                        </span>
-                        <span>Enviado por: {formatValue(attachment.uploaded_by_name)}</span>
-                        {attachment.description && <p>{attachment.description}</p>}
-                        <span className={styles.pathText}>{attachment.file_path}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={styles.muted}>Nenhum anexo carregado.</p>
-                )}
-              </section>
-
-              <section className={styles.section}>
-                <h3>
-                  <BadgeCheck size={17} />
-                  Validações
-                </h3>
-
-                {validations.length > 0 ? (
-                  <div className={styles.compactList}>
-                    {validations.map((validation) => (
-                      <div key={validation.id} className={styles.compactItem}>
-                        <div className={styles.itemHeader}>
-                          <strong>{getValidationResultLabel(validation.validation_result)}</strong>
-                          <span className={`${styles.smallBadge} ${styles[validation.validation_result]}`}>
-                            {validation.validation_type}
-                          </span>
-                        </div>
-                        <span>
-                          Por: {formatValue(validation.validated_by_name)} · Em: {formatDateTime(validation.created_at)}
-                        </span>
-                        {validation.rejection_reason && (
-                          <p><strong>Motivo:</strong> {validation.rejection_reason}</p>
-                        )}
-                        {validation.comment && <p><strong>Comentário:</strong> {validation.comment}</p>}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={styles.muted}>Nenhuma validação registrada.</p>
-                )}
-              </section>
-            </div>
+            <ExecutionTab
+              workOrder={workOrder}
+              report={report}
+              attachments={attachments}
+              validations={validations}
+              actionsContent={renderWorkOrderActions()}
+              finishOrderForm={renderFinishOrderForm()}
+            />
           )}
         </div>
 

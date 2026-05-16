@@ -1,31 +1,20 @@
 import type { WorkOrderListItem } from "../../../../types/workOrder";
+import type { WorkOrderQuickAction } from "../../utils/workOrderQuickActions";
 import styles from "../../styles.module.css";
 import { WorkOrderCard } from "../WorkOrderCard";
 
 type WorkOrdersListProps = {
   loading: boolean;
   workOrders: WorkOrderListItem[];
-  onPlan: (workOrder: WorkOrderListItem) => void;
-  onAddTask: (workOrder: WorkOrderListItem) => void;
-  onRelease: (workOrder: WorkOrderListItem) => void;
-  onReopenRejected: (workOrder: WorkOrderListItem) => void;
-  onExecute: (workOrder: WorkOrderListItem) => void;
-  onValidate: (workOrder: WorkOrderListItem) => void;
-  onOpenReport: (workOrder: WorkOrderListItem) => void;
   onOpenDetails: (workOrder: WorkOrderListItem) => void;
+  onOpenAction: (workOrder: WorkOrderListItem, action: WorkOrderQuickAction) => void;
 };
 
 export function WorkOrdersList({
   loading,
   workOrders,
-  onPlan,
-  onAddTask,
-  onRelease,
-  onReopenRejected,
-  onExecute,
-  onValidate,
-  onOpenReport,
   onOpenDetails,
+  onOpenAction,
 }: WorkOrdersListProps) {
   return (
     <section className={styles.list}>
@@ -40,14 +29,8 @@ export function WorkOrdersList({
           <WorkOrderCard
             key={order.id}
             order={order}
-            onPlan={onPlan}
-            onAddTask={onAddTask}
-            onRelease={onRelease}
-            onReopenRejected={onReopenRejected}
-            onExecute={onExecute}
-            onValidate={onValidate}
-            onOpenReport={onOpenReport}
             onOpenDetails={onOpenDetails}
+            onOpenAction={onOpenAction}
           />
         ))
       )}

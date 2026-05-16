@@ -25,6 +25,10 @@ export function canEditTaskStructure(status: WorkOrderStatus): boolean {
   return planningStatuses.includes(status);
 }
 
+export function canFillTaskResponses(status: WorkOrderStatus): boolean {
+  return ["released", "in_execution", "paused"].includes(status);
+}
+
 export function canExecuteWorkOrder(status: WorkOrderStatus): boolean {
   return executionStatuses.includes(status);
 }
